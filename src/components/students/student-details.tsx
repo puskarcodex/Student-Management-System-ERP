@@ -1,6 +1,6 @@
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Sheet,
   SheetClose,
@@ -9,38 +9,39 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet"
-import { Separator } from "@/components/ui/separator"
-
-import { useForm } from "react-hook-form"
-import { yupResolver } from "@hookform/resolvers/yup"
-import * as yup from "yup"
-import { useEffect } from "react"
-
-interface Student {
-  id: number;
-  name: string;
-  class: string;
-  rollNo: number;
-  status: "Active" | "Inactive";
-}
+} from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { useForm, Controller } from "react-hook-form";
+import { yupResolver } from "@hookform/resolvers/yup";
+import * as yup from "yup";
+import { useEffect } from "react";
+import type { Student } from "@/lib/types";
 
 interface ManageStudentProps {
-  isOpen: boolean
-  onOpenChange: (open: boolean) => void
-  student?: Student | null
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  student?: Student | null;
 }
 
-/* ================= YUP VALIDATION SCHEMA ================= */
 const schema = yup.object({
-  fullName: yup.string().required("Full name is required"),
+  name: yup.string().required("Name is required"),
   email: yup.string().email().required("Email is required"),
-  phone: yup.string().required("Phone number is required"),
-  dob: yup.date().required("Date of birth is required"),
+  phone: yup.string().required("Phone is required"),
+  dob: yup.string().required("Date of birth is required"),
   studentId: yup.string().required("Student ID is required"),
-})
+  class: yup.string().required("Class is required"),
+  rollNo: yup.number().required("Roll No is required"),
+  status: yup.string().oneOf(["Active", "Inactive"]).required("Status is required"),
+});
 
-type FormData = yup.InferType<typeof schema>
+type FormData = yup.InferType<typeof schema>;
 
 export default function ManageStudentDetails({
   isOpen,
@@ -53,29 +54,38 @@ export default function ManageStudentDetails({
     formState: { errors },
     reset,
     setValue,
+    control,
   } = useForm<FormData>({
     resolver: yupResolver(schema),
-  })
+    defaultValues: {
+      status: "Active",
+    },
+  });
 
-  // Pre-fill form when editing
   useEffect(() => {
     if (student) {
-      setValue("fullName", student.name)
-      setValue("studentId", String(student.rollNo))
+      setValue("name", student.name);
+      setValue("email", student.email);
+      setValue("phone", student.phone);
+      setValue("dob", student.dob);
+      setValue("studentId", student.studentId);
+      setValue("class", student.class);
+      setValue("rollNo", student.rollNo);
+      setValue("status", student.status);
     } else {
-      reset()
+      reset();
     }
-  }, [student, setValue, reset])
+  }, [student, setValue, reset]);
 
   const onSubmit = (data: FormData) => {
     if (student) {
-      console.log("Update Student:", { ...student, ...data })
+      console.log("Update Student:", { ...student, ...data });
     } else {
-      console.log("Create Student:", data)
+      console.log("Create Student:", data);
     }
-    reset()
-    onOpenChange(false)
-  }
+    reset();
+    onOpenChange(false);
+  };
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -83,23 +93,25 @@ export default function ManageStudentDetails({
         <SheetHeader>
           <SheetTitle>{student ? "Edit Student" : "Add Student"}</SheetTitle>
           <SheetDescription>
-            {student ? "Update the student details below." : "Fill in the student details below."}
+            {student
+              ? "Update the student details below."
+              : "Fill in the student details below."}
           </SheetDescription>
         </SheetHeader>
-        <div className="px-4">
+
+        <div className="px-4 py-6">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            {/* ================= Student Details ================= */}
             <Section title="Student Details">
-              <FormField label="Full Name" error={errors.fullName?.message}>
-                <Input {...register("fullName")} />
+              <FormField label="Name" error={errors.name?.message}>
+                <Input {...register("name")} placeholder="Full name" />
               </FormField>
 
               <FormField label="Email" error={errors.email?.message}>
-                <Input type="email" {...register("email")} />
+                <Input type="email" {...register("email")} placeholder="Email" />
               </FormField>
 
-              <FormField label="Phone Number" error={errors.phone?.message}>
-                <Input {...register("phone")} />
+              <FormField label="Phone" error={errors.phone?.message}>
+                <Input {...register("phone")} placeholder="Phone number" />
               </FormField>
 
               <FormField label="Date of Birth" error={errors.dob?.message}>
@@ -107,12 +119,40 @@ export default function ManageStudentDetails({
               </FormField>
 
               <FormField label="Student ID" error={errors.studentId?.message}>
-                <Input {...register("studentId")} />
+                <Input {...register("studentId")} placeholder="Student ID" />
+              </FormField>
+
+              <FormField label="Class" error={errors.class?.message}>
+                <Input {...register("class")} placeholder="Class" />
+              </FormField>
+
+              <FormField label="Roll No" error={errors.rollNo?.message}>
+                <Input type="number" {...register("rollNo")} placeholder="Roll No" />
+              </FormField>
+
+              <FormField label="Status" error={errors.status?.message}>
+                <Controller
+                  name="status"
+                  control={control}
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Active">Active</SelectItem>
+                        <SelectItem value="Inactive">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
               </FormField>
             </Section>
 
             <SheetFooter>
-              <Button type="submit">{student ? "Update Student" : "Save Student"}</Button>
+              <Button type="submit">
+                {student ? "Update" : "Save"} Student
+              </Button>
               <SheetClose asChild>
                 <Button type="button" variant="outline">
                   Cancel
@@ -123,17 +163,15 @@ export default function ManageStudentDetails({
         </div>
       </SheetContent>
     </Sheet>
-  )
+  );
 }
-
-/* ================= Helper Components ================= */
 
 function Section({
   title,
   children,
 }: {
-  title: string
-  children: React.ReactNode
+  title: string;
+  children: React.ReactNode;
 }) {
   return (
     <div className="space-y-4">
@@ -141,7 +179,7 @@ function Section({
       <Separator />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{children}</div>
     </div>
-  )
+  );
 }
 
 function FormField({
@@ -149,15 +187,15 @@ function FormField({
   error,
   children,
 }: {
-  label: string
-  error?: string
-  children: React.ReactNode
+  label: string;
+  error?: string;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-1">
+    <div className="grid gap-2">
       <Label>{label}</Label>
       {children}
       {error && <p className="text-sm text-red-500">{error}</p>}
     </div>
-  )
+  );
 }

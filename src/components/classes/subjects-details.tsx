@@ -1,5 +1,3 @@
-"use client";
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,28 +6,35 @@ import {
   SheetClose,
   SheetContent,
   SheetDescription,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
-  SheetFooter,
 } from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
+import { useEffect } from "react";
+import type { Subject } from "@/lib/types";
 
 interface ManageSubjectProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
+  subject?: Subject | null;
 }
 
-/* ================= YUP VALIDATION SCHEMA ================= */
 const schema = yup.object({
-  subjectName: yup.string().required("Subject name is required"),
-  classAssigned: yup.string().required("Class assigned is required"),
-  teacherAssigned: yup.string().required("Teacher assigned is required"),
-  subjectCode: yup.string().required("Subject code is required"),
-  description: yup.string().required("Description is required"),
+  name: yup.string().required("Subject name is required"),
+  code: yup.string().required("Subject code is required"),
+  teacherName: yup.string().required("Teacher name is required"),
+  status: yup.string().oneOf(["Active", "Inactive"]).required("Status is required"),
 });
 
 type FormData = yup.InferType<typeof schema>;
@@ -37,18 +42,39 @@ type FormData = yup.InferType<typeof schema>;
 export default function ManageSubjectDetails({
   isOpen,
   onOpenChange,
+  subject,
 }: ManageSubjectProps) {
   const {
     register,
     handleSubmit,
     formState: { errors },
     reset,
+    setValue,
+    control,
   } = useForm<FormData>({
     resolver: yupResolver(schema),
+    defaultValues: {
+      status: "Active",
+    },
   });
 
+  useEffect(() => {
+    if (subject) {
+      setValue("name", subject.name);
+      setValue("code", subject.code);
+      setValue("teacherName", subject.teacherName);
+      setValue("status", subject.status);
+    } else {
+      reset();
+    }
+  }, [subject, setValue, reset]);
+
   const onSubmit = (data: FormData) => {
-    console.log("Subject Data:", data);
+    if (subject) {
+      console.log("Update Subject:", { ...subject, ...data });
+    } else {
+      console.log("Create Subject:", data);
+    }
     reset();
     onOpenChange(false);
   };
@@ -57,37 +83,52 @@ export default function ManageSubjectDetails({
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent className="min-w-[30vw]">
         <SheetHeader>
-          <SheetTitle>Add Subject</SheetTitle>
-          <SheetDescription>Fill in the subject details below.</SheetDescription>
+          <SheetTitle>{subject ? "Edit Subject" : "Add Subject"}</SheetTitle>
+          <SheetDescription>
+            {subject
+              ? "Update the subject details below."
+              : "Fill in the subject details below."}
+          </SheetDescription>
         </SheetHeader>
 
-        <div className="px-4">
+        <div className="px-4 py-6">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            {/* ================= Subject Details ================= */}
             <Section title="Subject Details">
-              <FormField label="Subject Name" error={errors.subjectName?.message}>
-                <Input {...register("subjectName")} />
+              <FormField label="Subject Name" error={errors.name?.message}>
+                <Input {...register("name")} placeholder="Subject name" />
               </FormField>
 
-              <FormField label="Class Assigned" error={errors.classAssigned?.message}>
-                <Input {...register("classAssigned")} />
+              <FormField label="Subject Code" error={errors.code?.message}>
+                <Input {...register("code")} placeholder="Subject code (e.g., MATH101)" />
               </FormField>
 
-              <FormField label="Teacher Assigned" error={errors.teacherAssigned?.message}>
-                <Input {...register("teacherAssigned")} />
+              <FormField label="Teacher Name" error={errors.teacherName?.message}>
+                <Input {...register("teacherName")} placeholder="Teacher name" />
               </FormField>
 
-              <FormField label="Subject Code" error={errors.subjectCode?.message}>
-                <Input {...register("subjectCode")} />
-              </FormField>
-
-              <FormField label="Description" error={errors.description?.message}>
-                <Input {...register("description")} />
+              <FormField label="Status" error={errors.status?.message}>
+                <Controller
+                  name="status"
+                  control={control}
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Active">Active</SelectItem>
+                        <SelectItem value="Inactive">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
               </FormField>
             </Section>
 
             <SheetFooter>
-              <Button type="submit">Save Subject</Button>
+              <Button type="submit">
+                {subject ? "Update" : "Save"} Subject
+              </Button>
               <SheetClose asChild>
                 <Button type="button" variant="outline">
                   Cancel
@@ -101,7 +142,6 @@ export default function ManageSubjectDetails({
   );
 }
 
-/* ================= Helper Components ================= */
 function Section({
   title,
   children,
@@ -128,7 +168,7 @@ function FormField({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-1">
+    <div className="grid gap-2">
       <Label>{label}</Label>
       {children}
       {error && <p className="text-sm text-red-500">{error}</p>}

@@ -2,32 +2,47 @@
 
 import { useState } from "react";
 import { GenericTable } from "@/components/GenericTable/generic-table";
-import ManageDetails from "@/components/students/student-details";
+import ManageStudentDetails from "@/components/students/student-details";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Users, CalendarCheck, UserPlus } from "lucide-react";
+import { Users, UserPlus, CalendarCheck } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
+import type { Student } from "@/lib/types";
 
-// Define student data type
-interface Student {
-  id: number;
-  name: string;
-  class: string;
-  rollNo: number;
-  status: "Active" | "Inactive";
-}
-
-// Mock data
 const mockStudents: Student[] = [
-  { id: 1, name: "John Doe", class: "10th A", rollNo: 23, status: "Active" },
-  { id: 2, name: "Jane Smith", class: "9th B", rollNo: 12, status: "Inactive" },
+  {
+    id: 1,
+    name: "John Doe",
+    email: "john@school.com",
+    phone: "+1234567890",
+    dob: "2000-01-15",
+    studentId: "STU001",
+    class: "10th A",
+    rollNo: 23,
+    status: "Active",
+  },
+  {
+    id: 2,
+    name: "Jane Smith",
+    email: "jane@school.com",
+    phone: "+9876543210",
+    dob: "2000-05-20",
+    studentId: "STU002",
+    class: "9th B",
+    rollNo: 12,
+    status: "Inactive",
+  },
 ];
 
 const columns: ColumnDef<Student>[] = [
   {
     accessorKey: "name",
     header: "Name",
+  },
+  {
+    accessorKey: "email",
+    header: "Email",
   },
   {
     accessorKey: "class",
@@ -91,12 +106,27 @@ export default function Students() {
 
         {/* Stats Cards */}
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard title="Total Students" value={String(students.length)} icon={Users} color="bg-blue-500/70 text-white" />
-          <StatCard title="New Enrollments" value="45" icon={UserPlus} color="bg-green-500/70 text-white" />
-          <StatCard title="Average Attendance" value="92%" icon={CalendarCheck} color="bg-yellow-500/70 text-white" />
+          <StatCard
+            title="Total Students"
+            value={String(students.length)}
+            icon={Users}
+            color="bg-blue-500/70 text-white"
+          />
+          <StatCard
+            title="New Enrollments"
+            value="45"
+            icon={UserPlus}
+            color="bg-green-500/70 text-white"
+          />
+          <StatCard
+            title="Average Attendance"
+            value="92%"
+            icon={CalendarCheck}
+            color="bg-yellow-500/70 text-white"
+          />
         </div>
 
-        {/* Student Table */}
+        {/* Students Table */}
         <Card>
           <CardHeader>
             <CardTitle>All Students</CardTitle>
@@ -107,15 +137,15 @@ export default function Students() {
               columns={columns}
               onEdit={handleEdit}
               onDelete={handleDelete}
-              searchKeys={["name", "class"]}
+              searchKeys={["name", "email", "class"]}
             />
           </CardContent>
         </Card>
       </main>
 
       {/* Manage Student Modal */}
-      <ManageDetails 
-        isOpen={isManage} 
+      <ManageStudentDetails
+        isOpen={isManage}
         onOpenChange={setIsManage}
         student={selectedStudent}
       />
@@ -123,7 +153,6 @@ export default function Students() {
   );
 }
 
-/* ===================== StatCard Component ===================== */
 interface StatCardProps {
   title: string;
   value: string;

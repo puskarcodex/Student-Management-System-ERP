@@ -1,5 +1,3 @@
-"use client";
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,11 +6,10 @@ import {
   SheetClose,
   SheetContent,
   SheetDescription,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
-  SheetFooter,
 } from "@/components/ui/sheet";
-import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -20,56 +17,64 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-import { useForm } from "react-hook-form";
+import { Separator } from "@/components/ui/separator";
+import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
+import { useEffect } from "react";
+import type { Fee } from "@/lib/types";
 
-interface ManageFeesProps {
+interface ManageFeeProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
+  fee?: Fee | null;
 }
 
-/* ================= YUP VALIDATION SCHEMA ================= */
 const schema = yup.object({
   studentName: yup.string().required("Student name is required"),
-  className: yup.string().required("Class is required"),
-  rollNo: yup
-    .number()
-    .typeError("Roll number must be a number")
-    .required("Roll number is required")
-    .min(1, "Invalid roll number"),
-  feeType: yup.string().required("Fee type is required"),
-  amount: yup
-    .number()
-    .typeError("Amount must be a number")
-    .required("Amount is required")
-    .min(1, "Amount must be greater than 0"),
-  paymentDate: yup.string().required("Payment date is required"),
-  paymentStatus: yup.string().required("Payment status is required"),
+  amount: yup.number().required("Amount is required").min(0),
+  dueDate: yup.string().required("Due date is required"),
+  status: yup.string().oneOf(["Paid", "Pending", "Overdue"]).required("Status is required"),
 });
 
 type FormData = yup.InferType<typeof schema>;
 
-export default function ManageFeesDetails({
+export default function ManageFeeDetails({
   isOpen,
   onOpenChange,
-}: ManageFeesProps) {
+  fee,
+}: ManageFeeProps) {
   const {
     register,
     handleSubmit,
-    setValue,
     formState: { errors },
     reset,
+    setValue,
+    control,
   } = useForm<FormData>({
     resolver: yupResolver(schema),
     defaultValues: {
-      paymentDate: new Date().toISOString().split("T")[0],
+      status: "Pending",
     },
   });
 
+  useEffect(() => {
+    if (fee) {
+      setValue("studentName", fee.studentName);
+      setValue("amount", fee.amount);
+      setValue("dueDate", fee.dueDate);
+      setValue("status", fee.status);
+    } else {
+      reset();
+    }
+  }, [fee, setValue, reset]);
+
   const onSubmit = (data: FormData) => {
-    console.log("Fees Data:", data);
+    if (fee) {
+      console.log("Update Fee:", { ...fee, ...data });
+    } else {
+      console.log("Create Fee:", data);
+    }
     reset();
     onOpenChange(false);
   };
@@ -78,79 +83,53 @@ export default function ManageFeesDetails({
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent className="min-w-[30vw]">
         <SheetHeader>
-          <SheetTitle>Add / Collect Fees</SheetTitle>
+          <SheetTitle>{fee ? "Edit Fee" : "Add Fee"}</SheetTitle>
           <SheetDescription>
-            Enter student fee payment details below.
+            {fee
+              ? "Update the fee details below."
+              : "Fill in the fee details below."}
           </SheetDescription>
         </SheetHeader>
 
-        <div className="px-4">
+        <div className="px-4 py-6">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            <Section title="Fees Details">
-              <FormField
-                label="Student Name"
-                error={errors.studentName?.message}
-              >
-                <Input {...register("studentName")} />
+            <Section title="Fee Details">
+              <FormField label="Student Name" error={errors.studentName?.message}>
+                <Input {...register("studentName")} placeholder="Student name" />
               </FormField>
 
-              <FormField label="Class" error={errors.className?.message}>
-                <Input {...register("className")} />
+              <FormField label="Amount" error={errors.amount?.message}>
+                <Input type="number" step="0.01" {...register("amount")} placeholder="Amount" />
               </FormField>
 
-              <FormField label="Roll No" error={errors.rollNo?.message}>
-                <Input type="number" {...register("rollNo")} />
+              <FormField label="Due Date" error={errors.dueDate?.message}>
+                <Input type="date" {...register("dueDate")} />
               </FormField>
 
-              <FormField label="Fee Type" error={errors.feeType?.message}>
-                <Select onValueChange={(value) => setValue("feeType", value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select fee type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Tuition">Tuition</SelectItem>
-                    <SelectItem value="Exam">Exam</SelectItem>
-                    <SelectItem value="Transport">Transport</SelectItem>
-                    <SelectItem value="Library">Library</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FormField>
-
-              <FormField label="Amount (NRS)" error={errors.amount?.message}>
-                <Input type="number" {...register("amount")} />
-              </FormField>
-
-              <FormField
-                label="Payment Date"
-                error={errors.paymentDate?.message}
-              >
-                <Input type="date" {...register("paymentDate")} />
-              </FormField>
-
-              <FormField
-                label="Payment Status"
-                error={errors.paymentStatus?.message}
-              >
-                <Select
-                  onValueChange={(value) =>
-                    setValue("paymentStatus", value)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Paid">Paid</SelectItem>
-                    <SelectItem value="Pending">Pending</SelectItem>
-                    <SelectItem value="Partial">Partial</SelectItem>
-                  </SelectContent>
-                </Select>
+              <FormField label="Status" error={errors.status?.message}>
+                <Controller
+                  name="status"
+                  control={control}
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Paid">Paid</SelectItem>
+                        <SelectItem value="Pending">Pending</SelectItem>
+                        <SelectItem value="Overdue">Overdue</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
               </FormField>
             </Section>
 
             <SheetFooter>
-              <Button type="submit">Save Fees</Button>
+              <Button type="submit">
+                {fee ? "Update" : "Save"} Fee
+              </Button>
               <SheetClose asChild>
                 <Button type="button" variant="outline">
                   Cancel
@@ -164,7 +143,6 @@ export default function ManageFeesDetails({
   );
 }
 
-/* ================= Helper Components ================= */
 function Section({
   title,
   children,
@@ -176,9 +154,7 @@ function Section({
     <div className="space-y-4">
       <h3 className="text-lg font-semibold">{title}</h3>
       <Separator />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {children}
-      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{children}</div>
     </div>
   );
 }
@@ -193,7 +169,7 @@ function FormField({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-1">
+    <div className="grid gap-2">
       <Label>{label}</Label>
       {children}
       {error && <p className="text-sm text-red-500">{error}</p>}

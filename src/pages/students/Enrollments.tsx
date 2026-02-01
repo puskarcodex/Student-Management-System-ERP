@@ -1,18 +1,83 @@
 "use client";
 
 import { useState } from "react";
-import ManageEnrollment from "@/components/students/enrollments-details";
+import { GenericTable } from "@/components/GenericTable/generic-table";
+import ManageEnrollmentDetails from "@/components/students/enrollments-details";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import {
-  ClipboardList,
-  UserCheck,
-  UserPlus,
-} from "lucide-react";
+import { ClipboardList, UserCheck, UserPlus } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
+import type { Enrollment } from "@/lib/types";
+
+const mockEnrollments: Enrollment[] = [
+  {
+    id: 1,
+    studentId: 1,
+    studentName: "Rahul Sharma",
+    rollNo: "CSE102",
+    course: "B.Tech CSE",
+    enrolledOn: "2025-01-12",
+    status: "Active",
+  },
+  {
+    id: 2,
+    studentId: 2,
+    studentName: "Ananya Verma",
+    rollNo: "ECE054",
+    course: "B.Tech ECE",
+    enrolledOn: "2024-12-05",
+    status: "Completed",
+  },
+];
+
+const columns: ColumnDef<Enrollment>[] = [
+  {
+    accessorKey: "studentName",
+    header: "Student Name",
+  },
+  {
+    accessorKey: "rollNo",
+    header: "Roll No",
+  },
+  {
+    accessorKey: "course",
+    header: "Course",
+  },
+  {
+    accessorKey: "enrolledOn",
+    header: "Enrolled On",
+  },
+  {
+    accessorKey: "status",
+    header: "Status",
+    cell: (info) => (
+      <span
+        className={`px-2 py-1 rounded-full text-xs font-medium ${
+          info.getValue() === "Active"
+            ? "bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100"
+            : "bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100"
+        }`}
+      >
+        {String(info.getValue())}
+      </span>
+    ),
+  },
+];
 
 export default function Enrollments() {
   const [isManage, setIsManage] = useState(false);
+  const [enrollments, setEnrollments] = useState<Enrollment[]>(mockEnrollments);
+  const [selectedEnrollment, setSelectedEnrollment] = useState<Enrollment | null>(null);
+
+  const handleEdit = (enrollment: Enrollment) => {
+    setSelectedEnrollment(enrollment);
+    setIsManage(true);
+  };
+
+  const handleDelete = (enrollment: Enrollment) => {
+    setEnrollments(enrollments.filter((e) => e.id !== enrollment.id));
+  };
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -23,7 +88,10 @@ export default function Enrollments() {
           <div className="flex gap-2">
             <Button
               className="flex items-center gap-2 bg-primary text-white hover:bg-primary/90"
-              onClick={() => setIsManage(true)}
+              onClick={() => {
+                setSelectedEnrollment(null);
+                setIsManage(true);
+              }}
             >
               <UserPlus className="w-5 h-5" />
               Add Enrollment
@@ -35,13 +103,13 @@ export default function Enrollments() {
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <StatCard
             title="Total Enrollments"
-            value="820"
+            value={String(enrollments.length)}
             icon={ClipboardList}
             color="bg-blue-500/70 text-white"
           />
           <StatCard
             title="Active Enrollments"
-            value="760"
+            value={String(enrollments.filter((e) => e.status === "Active").length)}
             icon={UserCheck}
             color="bg-green-500/70 text-white"
           />
@@ -53,61 +121,33 @@ export default function Enrollments() {
           />
         </div>
 
-        {/* Enrollment List */}
+        {/* Enrollments Table */}
         <Card>
           <CardHeader>
             <CardTitle>All Enrollments</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left border-collapse">
-                <thead className="bg-muted/20 dark:bg-gray-700">
-                  <tr>
-                    <th className="p-2">Student Name</th>
-                    <th className="p-2">Roll No</th>
-                    <th className="p-2">Course / Class</th>
-                    <th className="p-2">Enrolled On</th>
-                    <th className="p-2">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="hover:bg-muted/10 dark:hover:bg-gray-600">
-                    <td className="p-2">Rahul Sharma</td>
-                    <td className="p-2">CSE102</td>
-                    <td className="p-2">B.Tech CSE</td>
-                    <td className="p-2">12 Jan 2025</td>
-                    <td className="p-2">
-                      <span className="px-2 py-1 rounded-full bg-green-100 text-green-800 text-xs font-medium dark:bg-green-800 dark:text-green-100">
-                        Active
-                      </span>
-                    </td>
-                  </tr>
-
-                  <tr className="hover:bg-muted/10 dark:hover:bg-gray-600">
-                    <td className="p-2">Ananya Verma</td>
-                    <td className="p-2">ECE054</td>
-                    <td className="p-2">B.Tech ECE</td>
-                    <td className="p-2">05 Dec 2024</td>
-                    <td className="p-2">
-                      <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 text-xs font-medium dark:bg-yellow-800 dark:text-yellow-100">
-                        Completed
-                      </span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <GenericTable
+              data={enrollments}
+              columns={columns}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              searchKeys={["studentName", "course"]}
+            />
           </CardContent>
         </Card>
       </main>
 
-      {/* Manage Enrollment Sheet */}
-      <ManageEnrollment isOpen={isManage} onOpenChange={setIsManage} />
+      {/* Manage Enrollment Modal */}
+      <ManageEnrollmentDetails
+        isOpen={isManage}
+        onOpenChange={setIsManage}
+        enrollment={selectedEnrollment}
+      />
     </div>
   );
 }
 
-/* ===================== StatCard ===================== */
 interface StatCardProps {
   title: string;
   value: string;
@@ -115,15 +155,10 @@ interface StatCardProps {
   color?: string;
 }
 
-function StatCard({
-  title,
-  value,
-  icon: Icon,
-  color = "bg-white",
-}: StatCardProps) {
+function StatCard({ title, value, icon: Icon, color = "bg-white" }: StatCardProps) {
   return (
-    <Card className={`rounded-lg shadow-lg overflow-hidden ${color}`}>
-      <div className="flex items-center justify-between p-6">
+    <Card className={`rounded-lg shadow-lg p-0 overflow-hidden ${color}`}>
+      <div className="flex items-center justify-between p-6 h-full">
         <div>
           <p className="text-sm font-medium">{title}</p>
           <p className="text-2xl font-bold">{value}</p>

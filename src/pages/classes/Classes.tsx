@@ -1,32 +1,82 @@
 "use client";
 
 import { useState } from "react";
+import { GenericTable } from "@/components/GenericTable/generic-table";
 import ManageClassDetails from "@/components/classes/classes-details";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Users, UserPlus, CalendarCheck } from "lucide-react";
+import { BookOpen, Users, Award } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
+import type { ClassData } from "@/lib/types";
+
+const mockClasses: ClassData[] = [
+  {
+    id: 1,
+    name: "10th A",
+    teacherName: "Mr. Sharma",
+    studentCount: 45,
+    status: "Active",
+  },
+  {
+    id: 2,
+    name: "9th B",
+    teacherName: "Ms. Patel",
+    studentCount: 42,
+    status: "Active",
+  },
+  {
+    id: 3,
+    name: "8th C",
+    teacherName: "Mr. Singh",
+    studentCount: 38,
+    status: "Inactive",
+  },
+];
+
+const columns: ColumnDef<ClassData>[] = [
+  {
+    accessorKey: "name",
+    header: "Class Name",
+  },
+  {
+    accessorKey: "teacherName",
+    header: "Teacher",
+  },
+  {
+    accessorKey: "studentCount",
+    header: "Students",
+  },
+  {
+    accessorKey: "status",
+    header: "Status",
+    cell: (info) => (
+      <span
+        className={`px-2 py-1 rounded-full text-xs font-medium ${
+          info.getValue() === "Active"
+            ? "bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100"
+            : "bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100"
+        }`}
+      >
+        {String(info.getValue())}
+      </span>
+    ),
+  },
+];
 
 export default function Classes() {
   const [isManage, setIsManage] = useState(false);
+  const [classes, setClasses] = useState<ClassData[]>(mockClasses);
+  const [selectedClass, setSelectedClass] = useState<ClassData | null>(null);
 
-  // Mock class data
-  const classesData = [
-    {
-      id: 1,
-      name: "10th A",
-      teacher: "Alice Johnson",
-      totalStudents: 30,
-      subjects: "Math, Science, English",
-    },
-    {
-      id: 2,
-      name: "9th B",
-      teacher: "Robert Smith",
-      totalStudents: 28,
-      subjects: "History, Geography, English",
-    },
-  ];
+  const handleEdit = (classData: ClassData) => {
+    setSelectedClass(classData);
+    setIsManage(true);
+  };
+
+  const handleDelete = (classData: ClassData) => {
+    setClasses(classes.filter((c) => c.id !== classData.id));
+  };
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -36,11 +86,13 @@ export default function Classes() {
           <h1 className="text-2xl font-semibold">Classes</h1>
           <div className="flex gap-2">
             <Button
-              variant="default"
               className="flex items-center gap-2 bg-primary text-white hover:bg-primary/90"
-              onClick={() => setIsManage(true)}
+              onClick={() => {
+                setSelectedClass(null);
+                setIsManage(true);
+              }}
             >
-              <UserPlus className="w-5 h-5" />
+              <BookOpen className="w-5 h-5" />
               Add Class
             </Button>
           </div>
@@ -48,50 +100,53 @@ export default function Classes() {
 
         {/* Stats Cards */}
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard title="Total Classes" value="12" icon={Users} color="bg-blue-500/70 text-white" />
-          <StatCard title="Total Students" value="345" icon={UserPlus} color="bg-green-500/70 text-white" />
-          <StatCard title="Average Attendance" value="95%" icon={CalendarCheck} color="bg-yellow-500/70 text-white" />
+          <StatCard
+            title="Total Classes"
+            value={String(classes.length)}
+            icon={BookOpen}
+            color="bg-blue-500/70 text-white"
+          />
+          <StatCard
+            title="Total Students"
+            value={String(classes.reduce((sum, c) => sum + c.studentCount, 0))}
+            icon={Users}
+            color="bg-green-500/70 text-white"
+          />
+          <StatCard
+            title="Active Classes"
+            value={String(classes.filter((c) => c.status === "Active").length)}
+            icon={Award}
+            color="bg-purple-500/70 text-white"
+          />
         </div>
 
-        {/* Classes List */}
+        {/* Classes Table */}
         <Card>
           <CardHeader>
             <CardTitle>All Classes</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left border-collapse">
-                <thead className="bg-muted/20 dark:bg-gray-700">
-                  <tr>
-                    <th className="p-2">Class Name</th>
-                    <th className="p-2">Class Teacher</th>
-                    <th className="p-2">Total Students</th>
-                    <th className="p-2">Subjects</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {classesData.map((cls) => (
-                    <tr key={cls.id} className="hover:bg-muted/10 dark:hover:bg-gray-600">
-                      <td className="p-2">{cls.name}</td>
-                      <td className="p-2">{cls.teacher}</td>
-                      <td className="p-2">{cls.totalStudents}</td>
-                      <td className="p-2">{cls.subjects}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <GenericTable
+              data={classes}
+              columns={columns}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              searchKeys={["name", "teacherName"]}
+            />
           </CardContent>
         </Card>
       </main>
 
       {/* Manage Class Modal */}
-      <ManageClassDetails isOpen={isManage} onOpenChange={setIsManage} />
+      <ManageClassDetails
+        isOpen={isManage}
+        onOpenChange={setIsManage}
+        classData={selectedClass}
+      />
     </div>
   );
 }
 
-/* ===================== StatCard Component ===================== */
 interface StatCardProps {
   title: string;
   value: string;

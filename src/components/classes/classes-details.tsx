@@ -1,5 +1,3 @@
-"use client";
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,32 +6,35 @@ import {
   SheetClose,
   SheetContent,
   SheetDescription,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
-  SheetFooter,
 } from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
+import { useEffect } from "react";
+import type { ClassData } from "@/lib/types";
 
 interface ManageClassProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
+  classData?: ClassData | null;
 }
 
-/* ================= YUP VALIDATION SCHEMA ================= */
 const schema = yup.object({
-  className: yup.string().required("Class name is required"),
-  classTeacher: yup.string().required("Class teacher is required"),
-  totalStudents: yup
-    .number()
-    .typeError("Total students must be a number")
-    .required("Total students is required")
-    .min(1, "At least 1 student required"),
-  section: yup.string().required("Section/Grade is required"),
-  subjectsAssigned: yup.string().required("Assigned subjects are required"),
+  name: yup.string().required("Class name is required"),
+  teacherName: yup.string().required("Teacher name is required"),
+  studentCount: yup.number().required("Student count is required").min(0),
+  status: yup.string().oneOf(["Active", "Inactive"]).required("Status is required"),
 });
 
 type FormData = yup.InferType<typeof schema>;
@@ -41,18 +42,39 @@ type FormData = yup.InferType<typeof schema>;
 export default function ManageClassDetails({
   isOpen,
   onOpenChange,
+  classData,
 }: ManageClassProps) {
   const {
     register,
     handleSubmit,
     formState: { errors },
     reset,
+    setValue,
+    control,
   } = useForm<FormData>({
     resolver: yupResolver(schema),
+    defaultValues: {
+      status: "Active",
+    },
   });
 
+  useEffect(() => {
+    if (classData) {
+      setValue("name", classData.name);
+      setValue("teacherName", classData.teacherName);
+      setValue("studentCount", classData.studentCount);
+      setValue("status", classData.status);
+    } else {
+      reset();
+    }
+  }, [classData, setValue, reset]);
+
   const onSubmit = (data: FormData) => {
-    console.log("Class Data:", data);
+    if (classData) {
+      console.log("Update Class:", { ...classData, ...data });
+    } else {
+      console.log("Create Class:", data);
+    }
     reset();
     onOpenChange(false);
   };
@@ -61,45 +83,52 @@ export default function ManageClassDetails({
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent className="min-w-[30vw]">
         <SheetHeader>
-          <SheetTitle>Add Class</SheetTitle>
-          <SheetDescription>Fill in the class details below.</SheetDescription>
+          <SheetTitle>{classData ? "Edit Class" : "Add Class"}</SheetTitle>
+          <SheetDescription>
+            {classData
+              ? "Update the class details below."
+              : "Fill in the class details below."}
+          </SheetDescription>
         </SheetHeader>
 
-        <div className="px-4">
+        <div className="px-4 py-6">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <Section title="Class Details">
-              <FormField label="Class Name" error={errors.className?.message}>
-                <Input {...register("className")} />
+              <FormField label="Class Name" error={errors.name?.message}>
+                <Input {...register("name")} placeholder="Class name (e.g., 10th A)" />
               </FormField>
 
-              <FormField
-                label="Class Teacher"
-                error={errors.classTeacher?.message}
-              >
-                <Input {...register("classTeacher")} />
+              <FormField label="Teacher Name" error={errors.teacherName?.message}>
+                <Input {...register("teacherName")} placeholder="Teacher name" />
               </FormField>
 
-              <FormField
-                label="Total Students"
-                error={errors.totalStudents?.message}
-              >
-                <Input type="number" {...register("totalStudents")} />
+              <FormField label="Student Count" error={errors.studentCount?.message}>
+                <Input type="number" {...register("studentCount")} placeholder="Number of students" />
               </FormField>
 
-              <FormField label="Section/Grade" error={errors.section?.message}>
-                <Input {...register("section")} />
-              </FormField>
-
-              <FormField
-                label="Assigned Subjects"
-                error={errors.subjectsAssigned?.message}
-              >
-                <Input {...register("subjectsAssigned")} />
+              <FormField label="Status" error={errors.status?.message}>
+                <Controller
+                  name="status"
+                  control={control}
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Active">Active</SelectItem>
+                        <SelectItem value="Inactive">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
               </FormField>
             </Section>
 
             <SheetFooter>
-              <Button type="submit">Save Class</Button>
+              <Button type="submit">
+                {classData ? "Update" : "Save"} Class
+              </Button>
               <SheetClose asChild>
                 <Button type="button" variant="outline">
                   Cancel
@@ -113,7 +142,6 @@ export default function ManageClassDetails({
   );
 }
 
-/* ================= Helper Components ================= */
 function Section({
   title,
   children,
@@ -140,7 +168,7 @@ function FormField({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-1">
+    <div className="grid gap-2">
       <Label>{label}</Label>
       {children}
       {error && <p className="text-sm text-red-500">{error}</p>}
