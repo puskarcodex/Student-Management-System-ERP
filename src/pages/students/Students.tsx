@@ -37,12 +37,24 @@ const mockStudents: Student[] = [
 
 const columns: ColumnDef<Student>[] = [
   {
+    accessorKey: "studentId",
+    header: "Student ID",
+  },
+  {
     accessorKey: "name",
     header: "Name",
   },
   {
     accessorKey: "email",
     header: "Email",
+  },
+  {
+    accessorKey: "phone",
+    header: "Phone",
+  },
+  {
+    accessorKey: "dob",
+    header: "Date of Birth",
   },
   {
     accessorKey: "class",

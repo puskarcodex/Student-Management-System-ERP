@@ -228,6 +228,365 @@ useEffect(() => {
     .catch(err => setError(err.message));
 }, []);
 ```
+# 🔌 API Integration Guide - Quick Reference
+
+## 📋 Files That Need Changes
+
+### All Page Files (10 total):
+- `pages/students/Students.tsx`
+- `pages/students/Grades.tsx`
+- `pages/students/Results.tsx`
+- `pages/students/Enrollments.tsx`
+- `pages/teachers/Teachers.tsx`
+- `pages/classes/Classes.tsx`
+- `pages/classes/Subjects.tsx`
+- `pages/attendance/Attendance.tsx`
+- `pages/fees/Fees.tsx`
+- `pages/dashboard/Dashboard.tsx`
+
+### All Detail Components (9 total):
+- `components/students/student-details.tsx`
+- `components/students/grades-details.tsx`
+- `components/students/results-details.tsx`
+- `components/students/enrollments-details.tsx`
+- `components/teachers/teachers-details.tsx`
+- `components/classes/classes-details.tsx`
+- `components/classes/subjects-details.tsx`
+- `components/attendance/attendance-details.tsx`
+- `components/fees/fees-details.tsx`
+
+---
+
+## 🎯 Example: Students Page + Detail Component
+
+### 1️⃣ Update Page: `src/pages/students/Students.tsx`
+
+```typescript
+import { useState, useEffect } from "react";
+import { Student } from "@/lib/types";
+import { studentService } from "@/lib/api"; // ✅ ADD THIS
+import GenericTable from "@/components/GenericTable/generic-table";
+import StudentDetails from "@/components/students/student-details";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
+
+export default function Students() {
+  // ❌ REMOVE THIS LINE
+  // const [students, setStudents] = useState<Student[]>(mockStudents);
+
+  // ✅ REPLACE WITH THESE
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  const [isManage, setIsManage] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState<Student | undefined>();
+
+  // ✅ ADD THIS - Fetch students on component mount
+  useEffect(() => {
+    fetchStudents();
+  }, []);
+
+  const fetchStudents = async () => {
+    try {
+      setLoading(true);
+      const response = await studentService.getAll();
+      setStudents(response.data.data);
+      setError(null);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch students');
+      console.error('Error fetching students:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEdit = (student: Student) => {
+    setSelectedStudent(student);
+    setIsManage(true);
+  };
+
+  // ✅ UPDATE DELETE HANDLER
+  const handleDelete = async (student: Student) => {
+    if (!confirm(`Delete student ${student.name}?`)) return;
+    
+    try {
+      await studentService.delete(student.id);
+      setStudents(students.filter(s => s.id !== student.id));
+    } catch (err: any) {
+      console.error('Error deleting student:', err);
+      alert('Failed to delete student');
+    }
+  };
+
+  const columns = [
+    { header: "Student ID", accessorKey: "studentId" },
+    { header: "Name", accessorKey: "name" },
+    { header: "Email", accessorKey: "email" },
+    { header: "Class", accessorKey: "class" },
+    { header: "Roll No", accessorKey: "rollNo" },
+    { header: "Status", accessorKey: "status" },
+  ];
+
+  // ✅ ADD LOADING STATE
+  if (loading) {
+    return <div className="p-6">Loading students...</div>;
+  }
+
+  // ✅ ADD ERROR STATE
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="text-red-500">Error: {error}</div>
+        <Button onClick={fetchStudents} className="mt-4">Retry</Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Students</h1>
+        <Button onClick={() => {
+          setSelectedStudent(undefined);
+          setIsManage(true);
+        }}>
+          <Plus className="mr-2 h-4 w-4" /> Add Student
+        </Button>
+      </div>
+
+      <GenericTable
+        data={students}
+        columns={columns}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        searchKeys={["name", "email", "studentId", "class"]}
+      />
+
+      <StudentDetails
+        isOpen={isManage}
+        onClose={() => setIsManage(false)}
+        student={selectedStudent}
+        onSuccess={fetchStudents} // ✅ ADD THIS - Refresh after save
+      />
+    </div>
+  );
+}
+```
+
+---
+
+### 2️⃣ Update Detail Component: `src/components/students/student-details.tsx`
+
+```typescript
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { yupResolver } from "@hookform/resolvers/yup";
+import * as yup from "yup";
+import { Student } from "@/lib/types";
+import { studentService } from "@/lib/api"; // ✅ ADD THIS
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+// ✅ UPDATE PROPS - Add onSuccess
+interface StudentDetailsProps {
+  isOpen: boolean;
+  onClose: () => void;
+  student?: Student;
+  onSuccess: () => void; // ✅ ADD THIS
+}
+
+const schema = yup.object({
+  name: yup.string().required("Name is required"),
+  email: yup.string().email("Invalid email").required("Email is required"),
+  phone: yup.string().required("Phone is required"),
+  dob: yup.string().required("Date of birth is required"),
+  studentId: yup.string().required("Student ID is required"),
+  class: yup.string().required("Class is required"),
+  rollNo: yup.number().required("Roll number is required"),
+  status: yup.string().oneOf(["Active", "Inactive"]).required("Status is required"),
+});
+
+export default function StudentDetails({ isOpen, onClose, student, onSuccess }: StudentDetailsProps) {
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    formState: { errors },
+  } = useForm({
+    resolver: yupResolver(schema),
+  });
+
+  useEffect(() => {
+    if (student) {
+      reset(student);
+    } else {
+      reset({
+        name: "",
+        email: "",
+        phone: "",
+        dob: "",
+        studentId: "",
+        class: "",
+        rollNo: "",
+        status: "Active",
+      });
+    }
+  }, [student, reset]);
+
+  // ✅ UPDATE SUBMIT HANDLER
+  const onSubmit = async (data: any) => {
+    try {
+      if (student) {
+        // Update existing student
+        await studentService.update(student.id, data);
+        console.log('Student updated successfully');
+      } else {
+        // Create new student
+        await studentService.create(data);
+        console.log('Student created successfully');
+      }
+      
+      onSuccess(); // ✅ Refresh the student list in parent
+      onClose();   // Close the modal
+    } catch (err: any) {
+      console.error('Error saving student:', err);
+      alert(err.response?.data?.message || 'Failed to save student');
+    }
+  };
+
+  return (
+    <Sheet open={isOpen} onOpenChange={onClose}>
+      <SheetContent className="overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>{student ? "Edit Student" : "Add Student"}</SheetTitle>
+        </SheetHeader>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-4">
+          <div>
+            <Label htmlFor="name">Name</Label>
+            <Input id="name" {...register("name")} />
+            {errors.name && <p className="text-red-500 text-sm">{errors.name.message}</p>}
+          </div>
+
+          <div>
+            <Label htmlFor="email">Email</Label>
+            <Input id="email" type="email" {...register("email")} />
+            {errors.email && <p className="text-red-500 text-sm">{errors.email.message}</p>}
+          </div>
+
+          <div>
+            <Label htmlFor="phone">Phone</Label>
+            <Input id="phone" {...register("phone")} />
+            {errors.phone && <p className="text-red-500 text-sm">{errors.phone.message}</p>}
+          </div>
+
+          <div>
+            <Label htmlFor="dob">Date of Birth</Label>
+            <Input id="dob" type="date" {...register("dob")} />
+            {errors.dob && <p className="text-red-500 text-sm">{errors.dob.message}</p>}
+          </div>
+
+          <div>
+            <Label htmlFor="studentId">Student ID</Label>
+            <Input id="studentId" {...register("studentId")} />
+            {errors.studentId && <p className="text-red-500 text-sm">{errors.studentId.message}</p>}
+          </div>
+
+          <div>
+            <Label htmlFor="class">Class</Label>
+            <Input id="class" {...register("class")} />
+            {errors.class && <p className="text-red-500 text-sm">{errors.class.message}</p>}
+          </div>
+
+          <div>
+            <Label htmlFor="rollNo">Roll Number</Label>
+            <Input id="rollNo" type="number" {...register("rollNo")} />
+            {errors.rollNo && <p className="text-red-500 text-sm">{errors.rollNo.message}</p>}
+          </div>
+
+          <div>
+            <Label htmlFor="status">Status</Label>
+            <Select onValueChange={(value) => setValue("status", value)} defaultValue={student?.status || "Active"}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Active">Active</SelectItem>
+                <SelectItem value="Inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
+            {errors.status && <p className="text-red-500 text-sm">{errors.status.message}</p>}
+          </div>
+
+          <div className="flex gap-2 pt-4">
+            <Button type="submit" className="flex-1">
+              {student ? "Update" : "Create"}
+            </Button>
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </SheetContent>
+    </Sheet>
+  );
+}
+```
+
+---
+
+## 🔄 Apply Same Pattern to All Other Pages
+
+Replace these service names for each module:
+
+| Page | Service | Detail Component |
+|------|---------|------------------|
+| Grades.tsx | `gradeService` | grades-details.tsx |
+| Results.tsx | `resultService` | results-details.tsx |
+| Enrollments.tsx | `enrollmentService` | enrollments-details.tsx |
+| Teachers.tsx | `teacherService` | teachers-details.tsx |
+| Classes.tsx | `classService` | classes-details.tsx |
+| Subjects.tsx | `subjectService` | subjects-details.tsx |
+| Attendance.tsx | `attendanceService` | attendance-details.tsx |
+| Fees.tsx | `feeService` | fees-details.tsx |
+
+---
+
+## ✅ Quick Checklist
+
+### For Every Page Component:
+1. ✅ Import service: `import { xxxService } from '@/lib/api'`
+2. ✅ Remove mock data array
+3. ✅ Add state: `useState([])`, `useState(true)`, `useState(null)`
+4. ✅ Add `useEffect` with fetch function
+5. ✅ Update `handleDelete` to call API
+6. ✅ Add `onSuccess={fetchData}` prop to detail component
+7. ✅ Add loading and error states
+
+### For Every Detail Component:
+1. ✅ Import service: `import { xxxService } from '@/lib/api'`
+2. ✅ Add `onSuccess` to props interface
+3. ✅ Update `onSubmit` to call API (create or update)
+4. ✅ Call `onSuccess()` after successful save
+5. ✅ Add try-catch error handling
+
+---
+
+## 🎯 That's It!
+
+Just copy this pattern and replace:
+- `Student` → `Grade`, `Teacher`, etc.
+- `studentService` → `gradeService`, `teacherService`, etc.
+- `students` → `grades`, `teachers`, etc.
+
+**Total files to update: 19** (10 pages + 9 detail components)
+
+
 
 ### API Service File
 Location: `src/lib/api.ts`
