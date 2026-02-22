@@ -1,4 +1,4 @@
-// src/lib/types.ts - Clean and working version
+// src/lib/types.ts
 
 /* ================= ENTITY INTERFACES ================= */
 
@@ -7,23 +7,13 @@ export interface Student {
   name: string;
   email: string;
   phone: string;
-  dob: string;  // This is already here - it stores Nepali date (YYYY-MM-DD format)
+  dob: string;
   studentId: string;
-  class: string;
+  className: string;        // FIX #9: renamed from 'class' (reserved keyword) — update Student pages
   rollNo: number;
+  gender?: string;
+  photo?: string;
   status: "Active" | "Inactive";
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface Grade {
-  id: number;
-  studentId: number;
-  studentName: string;
-  subject: string;
-  marks: number;
-  grade: string;
-  result: "Pass" | "Fail";
   createdAt?: string;
   updatedAt?: string;
 }
@@ -32,7 +22,7 @@ export interface Result {
   id: number;
   studentId: number;
   studentName: string;
-  class: string;
+  className: string;        // FIX #9: renamed from 'class' (reserved keyword) — update Result pages
   totalMarks: number;
   percentage: number;
   result: "Pass" | "Fail";
@@ -45,7 +35,6 @@ export interface Enrollment {
   studentId: number;
   studentName: string;
   rollNo: string;
-  course: string;
   enrolledOn: string;
   status: "Active" | "Completed";
   createdAt?: string;
@@ -60,14 +49,33 @@ export interface Teacher {
   dob: string;
   teacherId: string;
   subject: string;
+  gender?: string;
+  photo?: string;
   status: "Active" | "Inactive";
   createdAt?: string;
   updatedAt?: string;
 }
 
-export interface ClassData {
+export interface Staff {
   id: number;
   name: string;
+  email: string;
+  phone: string;
+  dob: string;
+  staffId: string;
+  role: string;
+  department: string;
+  gender?: string;
+  photo?: string;
+  status: "Active" | "Inactive";
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Class {
+  id: number;
+  name: string;
+  teacherId?: number;
   teacherName: string;
   studentCount: number;
   status: "Active" | "Inactive";
@@ -79,7 +87,10 @@ export interface Subject {
   id: number;
   name: string;
   code: string;
-  teacherName: string;
+  teacherId?: number;       // number (optional)
+  teacherName?: string;     // FIX #12: made optional — subjects-details form doesn't capture it
+  classId?: string;         // FIX #6: kept as string to match page usage ("Class 5" style)
+  className?: string;       // FIX #11: added to align with SubjectAssignment usage in pages
   status: "Active" | "Inactive";
   createdAt?: string;
   updatedAt?: string;
@@ -87,8 +98,10 @@ export interface Subject {
 
 export interface Attendance {
   id: number;
-  studentName: string;
-  studentId?: number;
+  name: string;             // FIX #1: renamed from 'studentName' — used for Student/Teacher/Staff
+  entityType: "Student" | "Teacher" | "Staff"; // FIX #3: added to differentiate record type
+  entityId?: number;        // FIX #1: renamed from 'studentId' — generic reference
+  classId?: string;         // FIX #2: changed from number to string — matches form usage ("Class 5")
   date: string;
   status: "Present" | "Absent" | "Leave";
   createdAt?: string;
@@ -104,6 +117,114 @@ export interface Fee {
   status: "Paid" | "Pending" | "Overdue";
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface FeeStructure {
+  id: number;
+  classId: string;          // string — matches page usage ("Class 5")
+  className: string;
+  recurringItems: FeeItem[];
+  oneTimeItems: FeeItem[];
+  totalAmount: number;
+  status: "Active" | "Inactive";
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface FeeItem {
+  id?: number;              // FIX #5: made optional — forms build items without IDs before submit
+  feeHead: string;
+  amount: number;
+  feeType: "Recurring" | "One-Time";
+  frequency?: "Monthly" | "Quarterly" | "Yearly"; // FIX #7: kept as proper union (not string)
+  description?: string;
+}
+
+export interface FeeBill {
+  id: number;
+  studentId: number;
+  studentName: string;
+  classId: string;
+  className: string;
+  billDate: string;         // FIX #4: kept required — must be added to collect-details form
+  dueDate: string;
+  feeItems: FeeItem[];
+  totalAmount: number;
+  paidAmount: number;
+  balanceAmount: number;
+  status: "Paid" | "Partial" | "Pending" | "Overdue";
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Payroll {
+  id: number;
+  employeeId: number;
+  employeeName: string;
+  employeeType: "Teacher" | "Staff";
+  month: string;
+  basicSalary: number;
+  allowances: number;
+  deductions: number;
+  netSalary: number;
+  paymentDate?: string;
+  status: "Paid" | "Pending" | "On Hold";
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface LeaveRequest {
+  id: number;
+  employeeId: number;
+  employeeName: string;
+  employeeType: "Teacher" | "Staff";
+  leaveType: "Sick" | "Casual" | "Annual" | "Unpaid" | "Maternity" | "Paternity";
+  fromDate: string;
+  toDate: string;
+  totalDays: number;
+  reason: string;
+  status: "Pending" | "Approved" | "Rejected";
+  approvedBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/* ================= SUBJECT ASSIGNMENT ================= */
+
+// FIX #11: Promoted SubjectAssignment from a local page type to a shared type.
+// teacherId is string here because the pages use string IDs from dropdowns.
+// When connecting to a real API, teacherId should become number and map accordingly.
+export interface SubjectAssignment {
+  id: number;
+  subjectName: string;
+  subjectCode: string;
+  className: string;
+  teacherId: string;
+  teacherName: string;
+}
+
+/* ================= AUTH TYPES ================= */
+
+export interface User {
+  id: number;
+  email: string;
+  name: string;
+  role: "admin" | "teacher" | "staff";
+  status: "Active" | "Inactive";
+  phone?: string;           // FIX #14: added optional phone to align with StoredUser in profile page
+  photo?: string;           // FIX #14: added optional photo to align with StoredUser in profile page
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface AuthResponse {
+  user: User;
+  token: string;
+  refreshToken?: string;
+  expiresIn?: number;
 }
 
 /* ================= API RESPONSE TYPES ================= */
@@ -158,7 +279,9 @@ export interface PaginationResponse {
 
 export interface StudentFilters {
   status?: "Active" | "Inactive";
-  class?: string;
+  className?: string;       // FIX #9: renamed from 'class'
+  section?: string;
+  gender?: string;
   search?: string;
 }
 
@@ -168,59 +291,89 @@ export interface TeacherFilters {
   search?: string;
 }
 
+export interface StaffFilters {
+  status?: "Active" | "Inactive";
+  role?: string;
+  department?: string;
+  search?: string;
+}
+
 export interface AttendanceFilters {
   startDate?: string;
   endDate?: string;
-  studentId?: number;
+  entityId?: number;        // FIX #1: renamed from 'studentId'
+  entityType?: "Student" | "Teacher" | "Staff"; // FIX #3: added
+  classId?: string;         // FIX #2: changed from number to string
   status?: "Present" | "Absent" | "Leave";
 }
 
 export interface FeeFilters {
   status?: "Paid" | "Pending" | "Overdue";
   studentId?: number;
+  classId?: string;
   dateRange?: {
     start: string;
     end: string;
   };
 }
 
+export interface PayrollFilters {
+  status?: "Paid" | "Pending" | "On Hold";
+  employeeType?: "Teacher" | "Staff";
+  month?: string;
+  search?: string;
+}
+
+export interface LeaveFilters {
+  status?: "Pending" | "Approved" | "Rejected";
+  employeeType?: "Teacher" | "Staff";
+  leaveType?: string;
+  search?: string;
+}
+
 /* ================= FORM REQUEST TYPES ================= */
 
 export type CreateStudentRequest = Omit<Student, "id" | "createdAt" | "updatedAt">;
-
 export type UpdateStudentRequest = Partial<Omit<Student, "id" | "createdAt" | "updatedAt">>;
 
 export type CreateTeacherRequest = Omit<Teacher, "id" | "createdAt" | "updatedAt">;
-
 export type UpdateTeacherRequest = Partial<Omit<Teacher, "id" | "createdAt" | "updatedAt">>;
 
-export type CreateGradeRequest = Omit<Grade, "id" | "createdAt" | "updatedAt">;
-
-export type UpdateGradeRequest = Partial<Omit<Grade, "id" | "createdAt" | "updatedAt">>;
+export type CreateStaffRequest = Omit<Staff, "id" | "createdAt" | "updatedAt">;
+export type UpdateStaffRequest = Partial<Omit<Staff, "id" | "createdAt" | "updatedAt">>;
 
 export type CreateResultRequest = Omit<Result, "id" | "createdAt" | "updatedAt">;
-
 export type UpdateResultRequest = Partial<Omit<Result, "id" | "createdAt" | "updatedAt">>;
 
 export type CreateEnrollmentRequest = Omit<Enrollment, "id" | "createdAt" | "updatedAt">;
-
 export type UpdateEnrollmentRequest = Partial<Omit<Enrollment, "id" | "createdAt" | "updatedAt">>;
 
-export type CreateClassRequest = Omit<ClassData, "id" | "createdAt" | "updatedAt">;
-
-export type UpdateClassRequest = Partial<Omit<ClassData, "id" | "createdAt" | "updatedAt">>;
+export type CreateClassRequest = Omit<Class, "id" | "createdAt" | "updatedAt">;
+export type UpdateClassRequest = Partial<Omit<Class, "id" | "createdAt" | "updatedAt">>;
 
 export type CreateSubjectRequest = Omit<Subject, "id" | "createdAt" | "updatedAt">;
-
 export type UpdateSubjectRequest = Partial<Omit<Subject, "id" | "createdAt" | "updatedAt">>;
 
 export type CreateAttendanceRequest = Omit<Attendance, "id" | "createdAt" | "updatedAt">;
-
 export type UpdateAttendanceRequest = Partial<Omit<Attendance, "id" | "createdAt" | "updatedAt">>;
 
 export type CreateFeeRequest = Omit<Fee, "id" | "createdAt" | "updatedAt">;
-
 export type UpdateFeeRequest = Partial<Omit<Fee, "id" | "createdAt" | "updatedAt">>;
+
+export type CreateFeeStructureRequest = Omit<FeeStructure, "id" | "createdAt" | "updatedAt">;
+export type UpdateFeeStructureRequest = Partial<Omit<FeeStructure, "id" | "createdAt" | "updatedAt">>;
+
+export type CreateFeeBillRequest = Omit<FeeBill, "id" | "createdAt" | "updatedAt">;
+export type UpdateFeeBillRequest = Partial<Omit<FeeBill, "id" | "createdAt" | "updatedAt">>;
+
+export type CreatePayrollRequest = Omit<Payroll, "id" | "createdAt" | "updatedAt">;
+export type UpdatePayrollRequest = Partial<Omit<Payroll, "id" | "createdAt" | "updatedAt">>;
+
+export type CreateLeaveRequest = Omit<LeaveRequest, "id" | "createdAt" | "updatedAt">;
+export type UpdateLeaveRequest = Partial<Omit<LeaveRequest, "id" | "createdAt" | "updatedAt">>;
+
+export type CreateSubjectAssignmentRequest = Omit<SubjectAssignment, "id">;
+export type UpdateSubjectAssignmentRequest = Partial<Omit<SubjectAssignment, "id">>;
 
 /* ================= DASHBOARD TYPES ================= */
 
@@ -255,6 +408,8 @@ export interface StudentReport {
   activeStudents: number;
   inactiveStudents: number;
   byClass: Record<string, number>;
+  bySection?: Record<string, number>;
+  byGender?: Record<string, number>;
 }
 
 export interface AttendanceReport {
@@ -271,28 +426,7 @@ export interface FeeReport {
   pendingAmount: number;
   overdueAmount: number;
   paymentPercentage: number;
-}
-
-/* ================= AUTH TYPES ================= */
-
-export interface User {
-  id: number;
-  email: string;
-  name: string;
-  role: "admin" | "teacher" | "staff";
-  status: "Active" | "Inactive";
-}
-
-export interface LoginRequest {
-  email: string;
-  password: string;
-}
-
-export interface AuthResponse {
-  user: User;
-  token: string;
-  refreshToken?: string;
-  expiresIn?: number;
+  byClass?: Record<string, number>;
 }
 
 /* ================= ERROR TYPES ================= */
@@ -323,20 +457,46 @@ export interface RequestConfig {
 
 /* ================= UTILITY TYPES ================= */
 
-export type EntityType = Student | Teacher | Grade | Result | Enrollment | ClassData | Subject | Attendance | Fee;
+export type EntityType =
+  | Student
+  | Teacher
+  | Staff
+  | Result
+  | Enrollment
+  | Class
+  | Subject
+  | SubjectAssignment
+  | Attendance
+  | Fee
+  | FeeStructure
+  | FeeBill
+  | Payroll
+  | LeaveRequest;
 
-export type AllFilters = StudentFilters | TeacherFilters | AttendanceFilters | FeeFilters;
+export type AllFilters =
+  | StudentFilters
+  | TeacherFilters
+  | StaffFilters
+  | AttendanceFilters
+  | FeeFilters
+  | PayrollFilters
+  | LeaveFilters;
 
 export type AllRequests =
   | CreateStudentRequest
   | CreateTeacherRequest
-  | CreateGradeRequest
+  | CreateStaffRequest
   | CreateResultRequest
   | CreateEnrollmentRequest
   | CreateClassRequest
   | CreateSubjectRequest
+  | CreateSubjectAssignmentRequest
   | CreateAttendanceRequest
-  | CreateFeeRequest;
+  | CreateFeeRequest
+  | CreateFeeStructureRequest
+  | CreateFeeBillRequest
+  | CreatePayrollRequest
+  | CreateLeaveRequest;
 
 /* ================= CONSTANTS ================= */
 
@@ -356,10 +516,17 @@ export const ATTENDANCE_STATUS = {
   LEAVE: "Leave",
 } as const;
 
+export const ENTITY_TYPE = {
+  STUDENT: "Student",
+  TEACHER: "Teacher",
+  STAFF: "Staff",
+} as const;
+
 export const FEE_STATUS = {
   PAID: "Paid",
   PENDING: "Pending",
   OVERDUE: "Overdue",
+  PARTIAL: "Partial",
 } as const;
 
 export const ENROLLMENT_STATUS = {
@@ -367,29 +534,61 @@ export const ENROLLMENT_STATUS = {
   COMPLETED: "Completed",
 } as const;
 
+export const FEE_TYPE = {
+  RECURRING: "Recurring",
+  ONE_TIME: "One-Time",
+} as const;
+
+export const FEE_FREQUENCY = {
+  MONTHLY: "Monthly",
+  QUARTERLY: "Quarterly",
+  YEARLY: "Yearly",
+} as const;
+
+export const PAYROLL_STATUS = {
+  PAID: "Paid",
+  PENDING: "Pending",
+  ON_HOLD: "On Hold",
+} as const;
+
+export const LEAVE_TYPE = {
+  SICK: "Sick",
+  CASUAL: "Casual",
+  ANNUAL: "Annual",
+  UNPAID: "Unpaid",
+  MATERNITY: "Maternity",
+  PATERNITY: "Paternity",
+} as const;
+
+export const LEAVE_STATUS = {
+  PENDING: "Pending",
+  APPROVED: "Approved",
+  REJECTED: "Rejected",
+} as const;
+
 /* ================= FORM STATE TYPES ================= */
 
-export interface FormState {
+export interface FormState<T = Record<string, unknown>> {
   isLoading: boolean;
   error: string | null;
   success: boolean;
-  data?: Record<string, unknown>;
+  data?: T;
 }
 
-export interface TableState {
+export interface TableState<F = AllFilters> {
   data: EntityType[];
   isLoading: boolean;
   error: string | null;
   pagination: PaginationResponse;
-  filters: AllFilters;
+  filters: F;
 }
 
 /* ================= MODAL TYPES ================= */
 
-export interface ModalState {
+export interface ModalState<D = EntityType> {
   isOpen: boolean;
   mode: "create" | "edit" | "view";
-  data?: EntityType;
+  data?: D;
 }
 
 /* ================= NOTIFICATION TYPES ================= */

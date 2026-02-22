@@ -1,119 +1,77 @@
 "use client"
 
-import { ChevronRight, type LucideIcon } from "lucide-react"
-import {  useNavigate } from "react-router-dom"
+import { type LucideIcon } from "lucide-react"
+import { useNavigate, useLocation } from "react-router-dom"
 
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
 import {
   SidebarGroup,
   SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
 
 export function NavMain({
   items,
-  expandedItems = [],
-  setExpandedItems,
 }: {
   items: {
     title: string
     url: string
     icon?: LucideIcon
-    isActive?: boolean
-    items?: {
-      title: string
-      url: string
-    }[]
   }[]
-  expandedItems?: string[]
-  setExpandedItems?: (items: string[]) => void
 }) {
   const navigate = useNavigate()
-
-  const handleToggle = (title: string, isOpen: boolean) => {
-    if (!setExpandedItems) return;
-    
-    if (isOpen) {
-      setExpandedItems([...expandedItems, title]);
-    } else {
-      setExpandedItems(expandedItems.filter(item => item !== title));
-    }
-  };
+  const location = useLocation()
 
   const handleNavClick = (url: string) => {
-    navigate(url);
-  };
+    navigate(url)
+  }
 
   return (
-    <SidebarGroup>
-      <SidebarGroupLabel>Platform</SidebarGroupLabel>
-      <SidebarMenu>
-        {items.map((item) => {
-          // If item has NO subitems, render as direct link
-          if (!item.items || item.items.length === 0) {
-            return (
-              <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton 
-                  asChild 
-                  tooltip={item.title}
-                  onClick={() => handleNavClick(item.url)}
-                  className="cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    {item.icon && <item.icon />}
-                    <span>{item.title}</span>
-                  </div>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            );
-          }
+    <SidebarGroup className="px-2"> {/* Added padding for capsule breathing room */}
+      <SidebarGroupLabel className="px-4 text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/50 mb-2">
+        Core Modules
+      </SidebarGroupLabel>
 
-          // If item HAS subitems, render with Collapsible dropdown
+      <SidebarMenu className="gap-1"> {/* Spacing between items */}
+        {items.map((item) => {
+          // Exact match or sub-route match logic
+          const isActive = location.pathname === item.url || (item.url !== "/dashboard" && location.pathname.startsWith(item.url))
+
           return (
-            <Collapsible
-              key={item.title}
-              asChild
-              open={expandedItems.includes(item.title)}
-              onOpenChange={(isOpen) => handleToggle(item.title, isOpen)}
-              className="group/collapsible"
-            >
-              <SidebarMenuItem>
-                <CollapsibleTrigger asChild>
-                  <SidebarMenuButton tooltip={item.title}>
-                    {item.icon && <item.icon />}
-                    <span>{item.title}</span>
-                    <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                  </SidebarMenuButton>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <SidebarMenuSub>
-                    {item.items?.map((subItem) => (
-                      <SidebarMenuSubItem key={subItem.title}>
-                        <SidebarMenuSubButton 
-                          asChild
-                          onClick={() => handleNavClick(subItem.url)}
-                          className="cursor-pointer"
-                        >
-                          <div>
-                            <span>{subItem.title}</span>
-                          </div>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    ))}
-                  </SidebarMenuSub>
-                </CollapsibleContent>
-              </SidebarMenuItem>
-            </Collapsible>
-          );
+            <SidebarMenuItem key={item.title}>
+              <SidebarMenuButton
+                onClick={() => handleNavClick(item.url)}
+                tooltip={item.title}
+                className={`
+                  relative cursor-pointer flex items-center gap-3 px-4 py-2.5
+                  transition-all duration-300 rounded-[1.25rem] group
+                  ${isActive 
+                    ? "bg-primary/10 text-primary shadow-sm shadow-primary/5" 
+                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"}
+                `}
+              >
+                {/* Active Indicator Pillar - subtle design touch */}
+                {isActive && (
+                  <div className="absolute left-1.5 w-1 h-5 bg-primary rounded-full" />
+                )}
+
+                {item.icon && (
+                  <item.icon
+                    className={`
+                      shrink-0 transition-transform duration-300
+                      ${isActive ? "text-primary scale-110" : "text-muted-foreground/70 group-hover:text-foreground"}
+                    `}
+                    size={20}
+                  />
+                )}
+                
+                <span className={`text-sm tracking-tight transition-all ${isActive ? "font-bold" : "font-medium"}`}>
+                  {item.title}
+                </span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )
         })}
       </SidebarMenu>
     </SidebarGroup>

@@ -2,24 +2,25 @@
 
 import { useState } from "react";
 import { GenericTable } from "@/components/GenericTable/generic-table";
-import ManageClassDetails from "@/components/classes/classes-details";
+import ManageSubjectDetails from "@/components/subjects/subjects-details";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { BookOpen, Users, Award, Plus } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
-import type { Class } from "@/lib/types";
+import type { Subject } from "@/lib/types";
 
-const mockClasses: Class[] = [
-  { id: 1, name: "10th A", teacherName: "Mr. Sharma", studentCount: 45, status: "Active" },
-  { id: 2, name: "9th B", teacherName: "Ms. Patel", studentCount: 42, status: "Active" },
-  { id: 3, name: "8th C", teacherName: "Mr. Singh", studentCount: 38, status: "Inactive" },
+const mockSubjects: Subject[] = [
+  { id: 1, name: "Mathematics", code: "MATH101", teacherName: "Mr. Sharma", status: "Active" },
+  { id: 2, name: "Physics", code: "PHYS101", teacherName: "Ms. Patel", status: "Active" },
+  { id: 3, name: "Chemistry", code: "CHEM101", teacherName: "Mr. Singh", status: "Active" },
+  { id: 4, name: "English", code: "ENG101", teacherName: "Ms. Kumar", status: "Inactive" },
 ];
 
-const columns: ColumnDef<Class>[] = [
-  { accessorKey: "name", header: "Class Name" },
+const columns: ColumnDef<Subject>[] = [
+  { accessorKey: "name", header: "Subject Name" },
+  { accessorKey: "code", header: "Subject Code" },
   { accessorKey: "teacherName", header: "Teacher" },
-  { accessorKey: "studentCount", header: "Students" },
   {
     accessorKey: "status",
     header: "Status",
@@ -35,18 +36,18 @@ const columns: ColumnDef<Class>[] = [
   },
 ];
 
-export default function Classes() {
+export default function Subjects() {
   const [isManage, setIsManage] = useState(false);
-  const [classes, setClasses] = useState<Class[]>(mockClasses);
-  const [selectedClass, setSelectedClass] = useState<Class | null>(null);
+  const [subjects, setSubjects] = useState<Subject[]>(mockSubjects);
+  const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
 
-  const handleEdit = (classData: Class) => {
-    setSelectedClass(classData);
+  const handleEdit = (subject: Subject) => {
+    setSelectedSubject(subject);
     setIsManage(true);
   };
 
-  const handleDelete = (classData: Class) => {
-    setClasses(classes.filter((c) => c.id !== classData.id));
+  const handleDelete = (subject: Subject) => {
+    setSubjects(subjects.filter((s) => s.id !== subject.id));
   };
 
   return (
@@ -56,49 +57,49 @@ export default function Classes() {
         {/* Header Section */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 ml-1 mt-2">
           <div>
-            <h1 className="text-4xl font-extrabold tracking-tight text-foreground">Classes</h1>
-            <p className="text-muted-foreground text-base font-medium mt-1">Manage classes and records</p>
+            <h1 className="text-4xl font-extrabold tracking-tight text-foreground">Subjects</h1>
+            <p className="text-muted-foreground text-base font-medium mt-1">Manage subjects and assignments</p>
           </div>
           <Button
-            onClick={() => { setSelectedClass(null); setIsManage(true); }}
+            onClick={() => { setSelectedSubject(null); setIsManage(true); }}
             className="rounded-2xl bg-primary px-6 py-6 h-auto font-bold shadow-lg shadow-primary/20 hover:shadow-xl hover:-translate-y-1 transition-all gap-2"
           >
             <Plus className="w-5 h-5" />
-            Add Class
+            Add Subject
           </Button>
         </div>
 
         {/* Stats Row */}
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard title="Total Classes" value={String(classes.length)} icon={BookOpen} variant="green" />
-          <StatCard title="Total Students" value={String(classes.reduce((sum, c) => sum + c.studentCount, 0))} icon={Users} variant="blue" />
-          <StatCard title="Active Classes" value={String(classes.filter((c) => c.status === "Active").length)} icon={Award} variant="amber" />
+          <StatCard title="Total Subjects" value={String(subjects.length)} icon={BookOpen} variant="green" />
+          <StatCard title="Active Subjects" value={String(subjects.filter((s) => s.status === "Active").length)} icon={Users} variant="blue" />
+          <StatCard title="Teachers" value="8" icon={Award} variant="purple" />
         </div>
 
         {/* Table Card */}
         <Card className="rounded-[2.5rem] border-none shadow-sm overflow-hidden bg-card">
           <CardHeader className="px-8 pt-8 flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-xl font-bold tracking-tight">All Classes</CardTitle>
+            <CardTitle className="text-xl font-bold tracking-tight">All Subjects</CardTitle>
             <div className="text-xs font-bold text-muted-foreground/50 uppercase tracking-widest">
-              Showing {classes.length} Records
+              Showing {subjects.length} Records
             </div>
           </CardHeader>
           <CardContent className="px-8 pb-8">
             <GenericTable
-              data={classes}
+              data={subjects}
               columns={columns}
               onEdit={handleEdit}
               onDelete={handleDelete}
-              searchKeys={["name", "teacherName"]}
+              searchKeys={["name", "code", "teacherName"]}
             />
           </CardContent>
         </Card>
       </main>
 
-      <ManageClassDetails
+      <ManageSubjectDetails
         isOpen={isManage}
         onOpenChange={setIsManage}
-        classData={selectedClass}
+        subject={selectedSubject}
       />
     </div>
   );

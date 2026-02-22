@@ -2,126 +2,113 @@
 
 import { useState } from "react";
 import { GenericTable } from "@/components/GenericTable/generic-table";
-import ManageTeacherDetails from "@/components/teachers/teachers-details";
+import ManageResultDetails from "@/components/results/results-details";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Users, BookOpen, Award } from "lucide-react";
+import { FileText, Percent, Award, Plus } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
-import type { Teacher } from "@/lib/types";
+import type { Result } from "@/lib/types";
 
-const mockTeachers: Teacher[] = [
-  {
-    id: 1,
-    name: "Mr. Sharma",
-    email: "sharma@school.com",
-    phone: "+1234567890",
-    dob: "1980-05-15",
-    teacherId: "TCH001",
-    subject: "Mathematics",
-    status: "Active",
-  },
-  {
-    id: 2,
-    name: "Ms. Patel",
-    email: "patel@school.com",
-    phone: "+9876543210",
-    dob: "1985-08-20",
-    teacherId: "TCH002",
-    subject: "English",
-    status: "Active",
-  },
+const mockResults: Result[] = [
+  { id: 1, studentId: 1, studentName: "Rahul Sharma", className: "10", totalMarks: 440, percentage: 88, result: "Pass" },
+  { id: 2, studentId: 2, studentName: "Ananya Verma", className: "9", totalMarks: 215, percentage: 43, result: "Fail" },
 ];
 
-const columns: ColumnDef<Teacher>[] = [
-  { accessorKey: "name", header: "Name" },
-  { accessorKey: "email", header: "Email" },
-  { accessorKey: "subject", header: "Subject" },
-  { accessorKey: "phone", header: "Phone" },
+const columns: ColumnDef<Result>[] = [
+  { accessorKey: "studentName", header: "Student Name" },
+  { accessorKey: "studentId", header: "Student ID" },
+  { accessorKey: "class", header: "Class" },
+  { accessorKey: "totalMarks", header: "Total Marks" },
+  { accessorKey: "percentage", header: "Percentage", cell: (info) => `${info.getValue()}%` },
   {
-    accessorKey: "status",
-    header: "Status",
+    accessorKey: "result",
+    header: "Result",
     cell: (info) => (
-      <span
-        className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-          info.getValue() === "Active"
-            ? "bg-emerald-500/10 text-emerald-600"
-            : "bg-rose-500/10 text-rose-600"
-        }`}
-      >
+      <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${info.getValue() === "Pass" ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-600"}`}>
         {String(info.getValue())}
       </span>
     ),
   },
 ];
 
-export default function Teachers() {
+export default function Results() {
   const [isManage, setIsManage] = useState(false);
-  const [teachers, setTeachers] = useState<Teacher[]>(mockTeachers);
-  const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
+  const [results, setResults] = useState<Result[]>(mockResults);
+  const [selectedResult, setSelectedResult] = useState<Result | null>(null);
+  const [mode, setMode] = useState<"add" | "edit" | "view">("add");
 
-  const handleEdit = (teacher: Teacher) => {
-    setSelectedTeacher(teacher);
+  const handleView = (result: Result) => {
+    setSelectedResult(result);
+    setMode("view");
     setIsManage(true);
   };
 
-  const handleDelete = (teacher: Teacher) => {
-    setTeachers(teachers.filter((t) => t.id !== teacher.id));
+  const handleEdit = (result: Result) => {
+    setSelectedResult(result);
+    setMode("edit");
+    setIsManage(true);
   };
+
+  const handleDelete = (result: Result) => {
+    setResults(results.filter((r) => r.id !== result.id));
+  };
+
+  const avgPercentage =
+    results.length > 0
+      ? Math.round(results.reduce((sum, r) => sum + r.percentage, 0) / results.length)
+      : 0;
+
+  const topPercentage = results.length > 0 ? Math.max(...results.map((r) => r.percentage)) : 0;
 
   return (
     <div className="p-4 md:px-8 md:pt-2 md:pb-8 bg-muted/30 min-h-screen">
       <main className="space-y-8">
-
-        {/* Header Section */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 ml-1 mt-2">
           <div>
-            <h1 className="text-4xl font-extrabold tracking-tight text-foreground">Teachers</h1>
-            <p className="text-muted-foreground text-base font-medium mt-1">Manage staff and teacher records</p>
+            <h1 className="text-4xl font-extrabold tracking-tight text-foreground">Results</h1>
+            <p className="text-muted-foreground text-base font-medium mt-1">Exam results & report cards</p>
           </div>
           <Button
-            onClick={() => {
-              setSelectedTeacher(null);
-              setIsManage(true);
-            }}
+            onClick={() => { setSelectedResult(null); setMode("add"); setIsManage(true); }}
             className="rounded-2xl bg-primary px-6 py-6 h-auto font-bold shadow-lg shadow-primary/20 hover:shadow-xl hover:-translate-y-1 transition-all gap-2"
           >
-            <Award className="w-5 h-5" />
-            Add Teacher
+            <Plus className="w-5 h-5" />
+            Add Result
           </Button>
         </div>
 
-        {/* Stats Row */}
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard title="Total Teachers" value={String(teachers.length)} icon={Users} variant="green" />
-          <StatCard title="Active Teachers" value={String(teachers.filter((t) => t.status === "Active").length)} icon={BookOpen} variant="blue" />
-          <StatCard title="Subjects Offered" value="12" icon={Award} variant="amber" />
+          <StatCard title="Total Results" value={String(results.length)} icon={FileText} variant="green" />
+          <StatCard title="Average Percentage" value={`${avgPercentage}%`} icon={Percent} variant="blue" />
+          <StatCard title="Top Score" value={`${topPercentage}%`} icon={Award} variant="purple" />
         </div>
 
-        {/* Table Card */}
         <Card className="rounded-[2.5rem] border-none shadow-sm overflow-hidden bg-card">
           <CardHeader className="px-8 pt-8 flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-xl font-bold tracking-tight">All Teachers</CardTitle>
+            <CardTitle className="text-xl font-bold tracking-tight">All Results</CardTitle>
             <div className="text-xs font-bold text-muted-foreground/50 uppercase tracking-widest">
-              Showing {teachers.length} Records
+              Showing {results.length} Records
             </div>
           </CardHeader>
           <CardContent className="px-8 pb-8">
             <GenericTable
-              data={teachers}
+              data={results}
               columns={columns}
+              onView={handleView}
               onEdit={handleEdit}
               onDelete={handleDelete}
-              searchKeys={["name", "email", "subject"]}
+              searchKeys={["studentName", "className"]}
             />
           </CardContent>
         </Card>
       </main>
 
-      <ManageTeacherDetails
+      <ManageResultDetails
         isOpen={isManage}
         onOpenChange={setIsManage}
-        teacher={selectedTeacher}
+        result={selectedResult}
+        mode={mode}
       />
     </div>
   );
