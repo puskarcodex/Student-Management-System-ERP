@@ -23,7 +23,6 @@ src/
 ├── components/
 │   ├── ui/                              # ShadCN UI primitives
 │   ├── common/
-│   │   ├── useTheme.tsx                 # Dark/light theme hook
 │   │   └── NepaliDatePickerField.tsx    # BS date picker
 │   ├── GenericTable/
 │   │   └── generic-table.tsx            # Reusable table (search, sort, edit, delete)
