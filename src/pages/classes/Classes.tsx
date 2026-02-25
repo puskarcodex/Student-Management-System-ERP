@@ -1,20 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { GenericTable } from "@/components/GenericTable/generic-table";
 import ManageClassDetails from "@/components/classes/classes-details";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { BookOpen, Users, Award, Plus } from "lucide-react";
+import { BookOpen, Users, Award, Plus, Loader2 } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { Class } from "@/lib/types";
-
-const mockClasses: Class[] = [
-  { id: 1, name: "10th A", teacherName: "Mr. Sharma", studentCount: 45, status: "Active" },
-  { id: 2, name: "9th B", teacherName: "Ms. Patel", studentCount: 42, status: "Active" },
-  { id: 3, name: "8th C", teacherName: "Mr. Singh", studentCount: 38, status: "Inactive" },
-];
+import { classesApi } from "@/lib/api";
 
 const columns: ColumnDef<Class>[] = [
   { accessorKey: "name", header: "Class Name" },
@@ -37,16 +32,43 @@ const columns: ColumnDef<Class>[] = [
 
 export default function Classes() {
   const [isManage, setIsManage] = useState(false);
-  const [classes, setClasses] = useState<Class[]>(mockClasses);
+  const [classes, setClasses] = useState<Class[]>([]);
   const [selectedClass, setSelectedClass] = useState<Class | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchClasses = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const res = await classesApi.getAll({ page: 1, limit: 100 });
+      setClasses(res.data ?? []);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load classes");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchClasses(); }, [fetchClasses]);
 
   const handleEdit = (classData: Class) => {
     setSelectedClass(classData);
     setIsManage(true);
   };
 
-  const handleDelete = (classData: Class) => {
-    setClasses(classes.filter((c) => c.id !== classData.id));
+  const handleDelete = async (classData: Class) => {
+    try {
+      await classesApi.delete(classData.id);
+      setClasses((prev) => prev.filter((c) => c.id !== classData.id));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete class");
+    }
+  };
+
+  const handleManageClose = (open: boolean) => {
+    setIsManage(open);
+    if (!open) fetchClasses();
   };
 
   return (
@@ -70,9 +92,9 @@ export default function Classes() {
 
         {/* Stats Row */}
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard title="Total Classes" value={String(classes.length)} icon={BookOpen} variant="green" />
-          <StatCard title="Total Students" value={String(classes.reduce((sum, c) => sum + c.studentCount, 0))} icon={Users} variant="blue" />
-          <StatCard title="Active Classes" value={String(classes.filter((c) => c.status === "Active").length)} icon={Award} variant="amber" />
+          <StatCard title="Total Classes"  value={isLoading ? "..." : String(classes.length)} icon={BookOpen} variant="green" />
+          <StatCard title="Total Students" value={isLoading ? "..." : String(classes.reduce((sum, c) => sum + c.studentCount, 0))} icon={Users} variant="blue" />
+          <StatCard title="Active Classes" value={isLoading ? "..." : String(classes.filter((c) => c.status === "Active").length)} icon={Award} variant="amber" />
         </div>
 
         {/* Table Card */}
@@ -84,20 +106,32 @@ export default function Classes() {
             </div>
           </CardHeader>
           <CardContent className="px-8 pb-8">
-            <GenericTable
-              data={classes}
-              columns={columns}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              searchKeys={["name", "teacherName"]}
-            />
+            {isLoading ? (
+              <div className="flex items-center justify-center py-20 gap-3 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="text-sm font-medium">Loading classes...</span>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <p className="text-sm font-bold text-rose-500">{error}</p>
+                <Button variant="outline" onClick={fetchClasses} className="rounded-xl">Retry</Button>
+              </div>
+            ) : (
+              <GenericTable
+                data={classes}
+                columns={columns}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                searchKeys={["name", "teacherName"]}
+              />
+            )}
           </CardContent>
         </Card>
       </main>
 
       <ManageClassDetails
         isOpen={isManage}
-        onOpenChange={setIsManage}
+        onOpenChange={handleManageClose}
         classData={selectedClass}
       />
     </div>

@@ -26,7 +26,7 @@ import type {
 
 /* ================= BASE CONFIG ================= */
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5000/api";
+const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5272/api";
 
 /* ================= HTTP CLIENT ================= */
 
@@ -45,10 +45,18 @@ async function request<T>(
     },
   });
 
-  const data = await res.json();
+  // Handle empty responses (e.g. 204 No Content)
+  const contentType = res.headers.get("content-type");
+  const hasJson = contentType?.includes("application/json");
+  const text = await res.text();
+  const data = hasJson && text ? JSON.parse(text) : text ? { message: text } : {};
 
   if (!res.ok) {
-    throw new Error(data?.error ?? data?.message ?? "Something went wrong");
+    throw new Error(
+      (data as Record<string, string>)?.error ??
+      (data as Record<string, string>)?.message ??
+      "Something went wrong"
+    );
   }
 
   return data as T;
@@ -79,6 +87,16 @@ function buildQuery(params: Record<string, unknown>): string {
 export const authApi = {
   login: (body: LoginRequest): Promise<ApiResponse<AuthResponse>> =>
     request("/auth/login", { method: "POST", body: JSON.stringify(body) }),
+
+  register: (body: {
+    username: string;
+    email: string;
+    password: string;
+    role: string;
+    referenceId?: number;
+    referenceType?: string;
+  }): Promise<ApiResponse<AuthResponse>> =>
+    request("/auth/register", { method: "POST", body: JSON.stringify(body) }),
 
   logout: (): Promise<ApiResponse<null>> =>
     request("/auth/logout", { method: "POST" }),
@@ -114,22 +132,50 @@ export const dashboardApi = {
     request("/dashboard/revenue"),
 };
 
+
 /* ================= STUDENTS ================= */
 
+// Backend returns "class" (reserved word), map it to "className" for frontend types
+function mapStudent(s: Record<string, unknown>): Student {
+  return {
+    ...(s as unknown as Student),
+    className: (s["class"] as string) ?? "",
+  };
+}
+
 export const studentsApi = {
-  getAll: (
+  getAll: async (
     filters?: StudentFilters & PaginationParams
-  ): Promise<ApiListResponse<Student>> =>
-    request(`/students${buildQuery({ ...filters })}`),
+  ): Promise<ApiListResponse<Student>> => {
+    const res = await request<ApiListResponse<Record<string, unknown>>>(
+      `/students${buildQuery({ ...filters })}`
+    );
+    return {
+      ...res,
+      data: res.data?.map(mapStudent) ?? [],
+    };
+  },
 
-  getById: (id: number): Promise<ApiResponse<Student>> =>
-    request(`/students/${id}`),
+  getById: async (id: number): Promise<ApiResponse<Student>> => {
+    const res = await request<ApiResponse<Record<string, unknown>>>(
+      `/students/${id}`
+    );
+    return {
+      ...res,
+      data: res.data ? mapStudent(res.data) : undefined,
+    };
+  },
 
-  create: (body: CreateStudentRequest): Promise<ApiResponse<Student>> =>
-    request("/students", { method: "POST", body: JSON.stringify(body) }),
+  create: (body: CreateStudentRequest): Promise<ApiResponse<Student>> => {
+    // Map "className" back to "class" for the backend
+    const payload = { ...body, class: body.className };
+    return request("/students", { method: "POST", body: JSON.stringify(payload) });
+  },
 
-  update: (id: number, body: UpdateStudentRequest): Promise<ApiResponse<Student>> =>
-    request(`/students/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  update: (id: number, body: UpdateStudentRequest): Promise<ApiResponse<Student>> => {
+    const payload = { ...body, class: body.className };
+    return request(`/students/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+  },
 
   delete: (id: number): Promise<ApiResponse<null>> =>
     request(`/students/${id}`, { method: "DELETE" }),
@@ -341,29 +387,29 @@ export const feesApi = {
 
 export const feeStructureApi = {
   getAll: (params?: PaginationParams): Promise<ApiListResponse<FeeStructure>> =>
-    request(`/fee-structures${buildQuery({ ...params })}`),
+    request(`/feestructure${buildQuery({ ...params })}`),
 
   getById: (id: number): Promise<ApiResponse<FeeStructure>> =>
-    request(`/fee-structures/${id}`),
+    request(`/feestructure/${id}`),
 
   getByClass: (classId: string): Promise<ApiResponse<FeeStructure>> =>
-    request(`/fee-structures/class/${encodeURIComponent(classId)}`),
+    request(`/feestructure/class/${encodeURIComponent(classId)}`),
 
   create: (body: CreateFeeStructureRequest): Promise<ApiResponse<FeeStructure>> =>
-    request("/fee-structures", { method: "POST", body: JSON.stringify(body) }),
+    request("/feestructure", { method: "POST", body: JSON.stringify(body) }),
 
   update: (id: number, body: UpdateFeeStructureRequest): Promise<ApiResponse<FeeStructure>> =>
-    request(`/fee-structures/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+    request(`/feestructure/${id}`, { method: "PUT", body: JSON.stringify(body) }),
 
   delete: (id: number): Promise<ApiResponse<null>> =>
-    request(`/fee-structures/${id}`, { method: "DELETE" }),
+    request(`/feestructure/${id}`, { method: "DELETE" }),
 
   updateItems: (
     id: number,
-    body: { recurringItems: FeeItem[]; oneTimeItems: FeeItem[] }
+    body: { classId: string; className: string; totalAmount: number; status: string; recurringItems: FeeItem[]; oneTimeItems: FeeItem[] }
   ): Promise<ApiResponse<FeeStructure>> =>
-    request(`/fee-structures/${id}/items`, {
-      method: "PATCH",
+    request(`/feestructure/${id}`, {
+      method: "PUT",
       body: JSON.stringify(body),
     }),
 };
@@ -374,28 +420,28 @@ export const feeBillsApi = {
   getAll: (
     filters?: FeeFilters & PaginationParams
   ): Promise<ApiListResponse<FeeBill>> =>
-    request(`/fee-bills${buildQuery({ ...filters })}`),
+    request(`/feebill${buildQuery({ ...filters })}`),
 
   getById: (id: number): Promise<ApiResponse<FeeBill>> =>
-    request(`/fee-bills/${id}`),
+    request(`/feebill/${id}`),
 
   getByStudent: (studentId: number): Promise<ApiListResponse<FeeBill>> =>
-    request(`/fee-bills/student/${studentId}`),
+    request(`/feebill/student/${studentId}`),
 
-  create: (body: CreateFeeBillRequest): Promise<ApiResponse<FeeBill>> =>
-    request("/fee-bills", { method: "POST", body: JSON.stringify(body) }),
+  create: (body: CreateFeeBillRequest | Record<string, unknown>): Promise<ApiResponse<FeeBill>> =>
+    request("/feebill", { method: "POST", body: JSON.stringify(body) }),
 
   update: (id: number, body: UpdateFeeBillRequest): Promise<ApiResponse<FeeBill>> =>
-    request(`/fee-bills/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+    request(`/feebill/${id}`, { method: "PUT", body: JSON.stringify(body) }),
 
   delete: (id: number): Promise<ApiResponse<null>> =>
-    request(`/fee-bills/${id}`, { method: "DELETE" }),
+    request(`/feebill/${id}`, { method: "DELETE" }),
 
   recordPayment: (
     id: number,
     body: { paymentAmount: number }
   ): Promise<ApiResponse<FeeBill>> =>
-    request(`/fee-bills/${id}/payment`, {
+    request(`/feebill/${id}/pay`, {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
@@ -434,29 +480,29 @@ export const leaveApi = {
   getAll: (
     filters?: LeaveFilters & PaginationParams
   ): Promise<ApiListResponse<LeaveRequest>> =>
-    request(`/leave${buildQuery({ ...filters })}`),
+    request(`/leaverequest${buildQuery({ ...filters })}`),
 
   getById: (id: number): Promise<ApiResponse<LeaveRequest>> =>
-    request(`/leave/${id}`),
+    request(`/leaverequest/${id}`),
 
   create: (body: CreateLeaveRequest): Promise<ApiResponse<LeaveRequest>> =>
-    request("/leave", { method: "POST", body: JSON.stringify(body) }),
+    request("/leaverequest", { method: "POST", body: JSON.stringify(body) }),
 
   update: (id: number, body: UpdateLeaveRequest): Promise<ApiResponse<LeaveRequest>> =>
-    request(`/leave/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+    request(`/leaverequest/${id}`, { method: "PUT", body: JSON.stringify(body) }),
 
   delete: (id: number): Promise<ApiResponse<null>> =>
-    request(`/leave/${id}`, { method: "DELETE" }),
+    request(`/leaverequest/${id}`, { method: "DELETE" }),
 
   approve: (id: number, approvedBy: string): Promise<ApiResponse<LeaveRequest>> =>
-    request(`/leave/${id}/approve`, {
+    request(`/leaverequest/${id}/approve`, {
       method: "PATCH",
       body: JSON.stringify({ status: "Approved", approvedBy }),
     }),
 
   reject: (id: number): Promise<ApiResponse<LeaveRequest>> =>
-    request(`/leave/${id}/reject`, {
+    request(`/leaverequest/${id}/reject`, {
       method: "PATCH",
-      body: JSON.stringify({ status: "Rejected" }),
+      body: JSON.stringify({ approvedBy: "" }),
     }),
 };

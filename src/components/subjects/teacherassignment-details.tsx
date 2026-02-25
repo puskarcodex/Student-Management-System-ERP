@@ -1,31 +1,24 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
-import { BookOpen, User } from "lucide-react";
+import { BookOpen, User, Loader2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
+  Sheet, SheetClose, SheetContent, SheetDescription,
+  SheetFooter, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import type { Teacher } from "@/lib/types";
+import { subjectAssignmentsApi } from "@/lib/api";
 
 export interface SubjectAssignment {
   id: number;
@@ -35,15 +28,6 @@ export interface SubjectAssignment {
   teacherId: string;
   teacherName: string;
 }
-
-// eslint-disable-next-line react-refresh/only-export-components
-export const MOCK_TEACHERS = [
-  { id: "1", name: "Mr. Rajesh Kumar"   },
-  { id: "2", name: "Mrs. Anjali Sharma" },
-  { id: "3", name: "Mr. Suresh Gautam"  },
-  { id: "4", name: "Ms. Priya Shrestha" },
-  { id: "5", name: "Mr. Bikash Karki"   },
-];
 
 const CLASS_OPTIONS = [
   "Nursery","LKG","UKG",
@@ -76,24 +60,19 @@ interface TeacherAssignmentDetailsProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   subject?: SubjectAssignment | null;
-  onSave?: (data: SubjectAssignment) => void;
-  onCreate?: (data: Omit<SubjectAssignment, "id">) => void;
+  teachers: Teacher[];
 }
 
 export default function TeacherAssignmentDetails({
   isOpen,
   onOpenChange,
   subject,
-  onSave,
-  onCreate,
+  teachers,
 }: TeacherAssignmentDetailsProps) {
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-    control,
-  } = useForm<FormData>({
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError]   = useState<string | null>(null);
+
+  const { register, handleSubmit, formState: { errors }, reset, control } = useForm<FormData>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: yupResolver(schema) as any,
     defaultValues: { subjectName: "", subjectCode: "", className: "", teacherId: "" },
@@ -101,6 +80,7 @@ export default function TeacherAssignmentDetails({
 
   useEffect(() => {
     if (!isOpen) return;
+    setSubmitError(null);
     if (subject) {
       reset({
         subjectName: subject.subjectName,
@@ -113,21 +93,29 @@ export default function TeacherAssignmentDetails({
     }
   }, [isOpen, subject, reset]);
 
-  const onSubmit = (data: FormData) => {
-    const teacher = MOCK_TEACHERS.find((t) => t.id === data.teacherId);
-    const payload = {
-      subjectName: data.subjectName,
-      subjectCode: data.subjectCode.toUpperCase(),
-      className:   data.className,
-      teacherId:   data.teacherId ?? "",
-      teacherName: teacher?.name ?? "",
-    };
-    if (subject) {
-      onSave?.({ ...payload, id: subject.id });
-    } else {
-      onCreate?.(payload);
+  const onSubmit = async (data: FormData) => {
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      const teacher = teachers.find((t) => String(t.id) === data.teacherId);
+      const payload = {
+        subjectName: data.subjectName,
+        subjectCode: data.subjectCode.toUpperCase(),
+        className:   data.className,
+        teacherId:   data.teacherId ?? "",
+        teacherName: teacher?.name ?? "",
+      };
+      if (subject) {
+        await subjectAssignmentsApi.update(subject.id, payload);
+      } else {
+        await subjectAssignmentsApi.create(payload);
+      }
+      onOpenChange(false);
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setIsSubmitting(false);
     }
-    onOpenChange(false);
   };
 
   return (
@@ -152,9 +140,7 @@ export default function TeacherAssignmentDetails({
 
             <FormSection title="Subject Details" icon={BookOpen}>
               <FormField label="Subject Name" error={errors.subjectName?.message}>
-                <Controller
-                  name="subjectName"
-                  control={control}
+                <Controller name="subjectName" control={control}
                   render={({ field }) => (
                     <Select value={field.value} onValueChange={field.onChange}>
                       <SelectTrigger className="rounded-xl border-muted-foreground/20">
@@ -180,9 +166,7 @@ export default function TeacherAssignmentDetails({
                 </FormField>
 
                 <FormField label="Class" error={errors.className?.message}>
-                  <Controller
-                    name="className"
-                    control={control}
+                  <Controller name="className" control={control}
                     render={({ field }) => (
                       <Select value={field.value} onValueChange={field.onChange}>
                         <SelectTrigger className="rounded-xl border-muted-foreground/20">
@@ -202,9 +186,7 @@ export default function TeacherAssignmentDetails({
 
             <FormSection title="Assign Teacher" icon={User}>
               <FormField label="Teacher" error={errors.teacherId?.message}>
-                <Controller
-                  name="teacherId"
-                  control={control}
+                <Controller name="teacherId" control={control}
                   render={({ field }) => (
                     <Select value={field.value || "unassigned"} onValueChange={(v) => field.onChange(v === "unassigned" ? "" : v)}>
                       <SelectTrigger className="rounded-xl border-muted-foreground/20">
@@ -214,8 +196,8 @@ export default function TeacherAssignmentDetails({
                         <SelectItem value="unassigned" className="text-muted-foreground/50 font-medium">
                           — Unassigned —
                         </SelectItem>
-                        {MOCK_TEACHERS.map((t) => (
-                          <SelectItem key={t.id} value={t.id} className="font-medium">{t.name}</SelectItem>
+                        {teachers.map((t) => (
+                          <SelectItem key={t.id} value={String(t.id)} className="font-medium">{t.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -227,21 +209,32 @@ export default function TeacherAssignmentDetails({
               </p>
             </FormSection>
 
+            {submitError && (
+              <p className="text-[11px] font-bold text-rose-500 text-center">{submitError}</p>
+            )}
           </form>
         </div>
 
         <SheetFooter className="p-8 bg-card border-t flex flex-row items-center justify-end gap-3">
           <SheetClose asChild>
-            <Button type="button" variant="ghost" className="rounded-xl font-bold text-muted-foreground">
+            <Button type="button" variant="ghost" className="rounded-xl font-bold text-muted-foreground" disabled={isSubmitting}>
               Cancel
             </Button>
           </SheetClose>
           <Button
             type="submit"
             form="subject-form"
+            disabled={isSubmitting}
             className="rounded-xl bg-primary px-8 font-black shadow-lg shadow-primary/20 hover:shadow-xl transition-all"
           >
-            {subject ? "Update Assignment" : "Assign Teacher"}
+            {isSubmitting ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {subject ? "Updating..." : "Assigning..."}
+              </span>
+            ) : (
+              subject ? "Update Assignment" : "Assign Teacher"
+            )}
           </Button>
         </SheetFooter>
       </SheetContent>

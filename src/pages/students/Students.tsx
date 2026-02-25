@@ -1,24 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { GenericTable } from "@/components/GenericTable/generic-table";
 import ManageStudentDetails from "@/components/students/student-details";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Users, UserPlus, CalendarCheck } from "lucide-react";
+import { Users, UserPlus, CalendarCheck, Loader2 } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { Student } from "@/lib/types";
-
-const mockStudents: Student[] = [
-  { id: 1, name: "John Doe", email: "john@school.com", phone: "+1234567890", dob: "2000-01-15", studentId: "STU001", className: "10", rollNo: 23, status: "Active" },
-  { id: 2, name: "Jane Smith", email: "jane@school.com", phone: "+9876543210", dob: "2000-05-20", studentId: "STU002", className: "9", rollNo: 12, status: "Inactive" },
-];
+import { studentsApi } from "@/lib/api";
 
 const columns: ColumnDef<Student>[] = [
   { accessorKey: "studentId", header: "ID" },
   { accessorKey: "name", header: "Name" },
-  { accessorKey: "className", header: "Class" },
+  { accessorKey: "class", header: "Class" },
   { accessorKey: "rollNo", header: "Roll" },
   {
     accessorKey: "status",
@@ -27,8 +23,8 @@ const columns: ColumnDef<Student>[] = [
       const status = String(info.getValue());
       return (
         <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-          status === "Active" 
-            ? "bg-emerald-500/10 text-emerald-600" 
+          status === "Active"
+            ? "bg-emerald-500/10 text-emerald-600"
             : "bg-rose-500/10 text-rose-600"
         }`}>
           {status}
@@ -40,22 +36,61 @@ const columns: ColumnDef<Student>[] = [
 
 export default function Students() {
   const [isManage, setIsManage] = useState(false);
-  const [students, setStudents] = useState<Student[]>(mockStudents);
+  const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [total, setTotal] = useState(0);
+
+  const fetchStudents = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const response = await studentsApi.getAll({ page: 1, limit: 100 });
+      setStudents(response.data ?? []);
+      setTotal(response.pagination?.total ?? response.data?.length ?? 0);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to load students";
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchStudents();
+  }, [fetchStudents]);
 
   const handleEdit = (student: Student) => {
     setSelectedStudent(student);
     setIsManage(true);
   };
 
-  const handleDelete = (student: Student) => {
-    setStudents(students.filter((s) => s.id !== student.id));
+  const handleDelete = async (student: Student) => {
+    try {
+      await studentsApi.delete(student.id);
+      setStudents((prev) => prev.filter((s) => s.id !== student.id));
+      setTotal((prev) => prev - 1);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to delete student";
+      alert(message);
+    }
   };
+
+  const handleManageClose = (open: boolean) => {
+    setIsManage(open);
+    if (!open) {
+      // Refresh list after add/edit
+      fetchStudents();
+    }
+  };
+
+  const activeCount = students.filter((s) => s.status === "Active").length;
 
   return (
     <div className="p-4 md:px-8 md:pt-2 md:pb-8 bg-muted/30 min-h-screen">
       <main className="space-y-8">
-        
+
         {/* Header Section */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 ml-1 mt-2">
           <div>
@@ -78,13 +113,13 @@ export default function Students() {
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <StatCard
             title="Total Students"
-            value={String(students.length)}
+            value={isLoading ? "..." : String(total)}
             icon={Users}
             variant="blue"
           />
           <StatCard
-            title="New Enrollments"
-            value="45"
+            title="Active Students"
+            value={isLoading ? "..." : String(activeCount)}
             icon={UserPlus}
             variant="green"
           />
@@ -105,20 +140,34 @@ export default function Students() {
             </div>
           </CardHeader>
           <CardContent className="px-8 pb-8">
-            <GenericTable
-              data={students}
-              columns={columns}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              searchKeys={["name", "studentId", "className"]}
-            />
+            {isLoading ? (
+              <div className="flex items-center justify-center py-20 gap-3 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="text-sm font-medium">Loading students...</span>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <p className="text-sm font-bold text-rose-500">{error}</p>
+                <Button variant="outline" onClick={fetchStudents} className="rounded-xl">
+                  Retry
+                </Button>
+              </div>
+            ) : (
+              <GenericTable
+                data={students}
+                columns={columns}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                searchKeys={["name", "studentId", "className"]}
+              />
+            )}
           </CardContent>
         </Card>
       </main>
 
       <ManageStudentDetails
         isOpen={isManage}
-        onOpenChange={setIsManage}
+        onOpenChange={handleManageClose}
         student={selectedStudent}
       />
     </div>
@@ -126,7 +175,6 @@ export default function Students() {
 }
 
 function StatCard({ title, value, icon: Icon, variant }: { title: string; value: string; icon: LucideIcon; variant: 'blue' | 'green' | 'amber' }) {
-  // Sweet & Subtle Color Mapping
   const styles = {
     blue: {
       bg: "bg-indigo-50",

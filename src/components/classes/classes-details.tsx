@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
-import { BookOpen, Users } from "lucide-react";
+import { BookOpen, Users, Loader2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -26,8 +26,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { TEACHER_OPTIONS, STATUS_OPTIONS } from "@/lib/dropdown-options";
-import type { Class } from "@/lib/types";
+import { STATUS_OPTIONS } from "@/lib/dropdown-options";
+import type { Class, Teacher } from "@/lib/types";
+import { classesApi, teachersApi } from "@/lib/api";
 
 interface ManageClassProps {
   isOpen: boolean;
@@ -38,15 +39,8 @@ interface ManageClassProps {
 const schema = yup.object({
   name: yup.string().required("Class name is required"),
   teacherName: yup.string().required("Teacher name is required"),
-  studentCount: yup
-    .number()
-    .typeError("Must be a number")
-    .required("Student count is required")
-    .min(0),
-  status: yup
-    .string()
-    .oneOf(["Active", "Inactive"])
-    .required("Status is required"),
+  studentCount: yup.number().typeError("Must be a number").required("Student count is required").min(0),
+  status: yup.string().oneOf(["Active", "Inactive"]).required("Status is required"),
 });
 
 type FormData = yup.InferType<typeof schema>;
@@ -56,6 +50,16 @@ export default function ManageClassDetails({
   onOpenChange,
   classData,
 }: ManageClassProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+
+  useEffect(() => {
+    teachersApi.getAll({ page: 1, limit: 500 }).then((res) => {
+      setTeachers(res.data ?? []);
+    }).catch(() => {});
+  }, []);
+
   const {
     handleSubmit,
     formState: { errors },
@@ -69,6 +73,7 @@ export default function ManageClassDetails({
 
   useEffect(() => {
     if (!isOpen) return;
+    setSubmitError(null);
     if (classData) {
       reset({
         name: classData.name,
@@ -81,12 +86,27 @@ export default function ManageClassDetails({
     }
   }, [isOpen, classData, reset]);
 
-  const onSubmit = (data: FormData) => {
-    console.log(classData ? "Update Class:" : "Create Class:", {
-      ...classData,
-      ...data,
-    });
-    onOpenChange(false);
+  const onSubmit = async (data: FormData) => {
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      const payload = {
+        name: data.name,
+        teacherName: data.teacherName,
+        studentCount: data.studentCount,
+        status: data.status as "Active" | "Inactive",
+      };
+      if (classData) {
+        await classesApi.update(classData.id, payload);
+      } else {
+        await classesApi.create(payload);
+      }
+      onOpenChange(false);
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -109,11 +129,8 @@ export default function ManageClassDetails({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-8 py-6">
-          <form
-            id="class-form"
-            onSubmit={handleSubmit(onSubmit)}
-            className="space-y-8"
-          >
+          <form id="class-form" onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+
             {/* Class Details */}
             <FormSection title="Class Details" icon={BookOpen}>
               <FormField label="Class Name" error={errors.name?.message}>
@@ -134,9 +151,9 @@ export default function ManageClassDetails({
                         <SelectValue placeholder="Select teacher" />
                       </SelectTrigger>
                       <SelectContent className="rounded-xl">
-                        {TEACHER_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.label}>
-                            {opt.label}
+                        {teachers.map((t) => (
+                          <SelectItem key={t.id} value={t.name}>
+                            {t.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -149,10 +166,7 @@ export default function ManageClassDetails({
             {/* Enrollment Details */}
             <FormSection title="Enrollment Details" icon={Users}>
               <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  label="Student Count"
-                  error={errors.studentCount?.message}
-                >
+                <FormField label="Student Count" error={errors.studentCount?.message}>
                   <Input
                     type="number"
                     {...register("studentCount")}
@@ -166,10 +180,7 @@ export default function ManageClassDetails({
                     name="status"
                     control={control}
                     render={({ field }) => (
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                      >
+                      <Select value={field.value} onValueChange={field.onChange}>
                         <SelectTrigger className="rounded-xl border-muted-foreground/20">
                           <SelectValue placeholder="Status" />
                         </SelectTrigger>
@@ -178,11 +189,7 @@ export default function ManageClassDetails({
                             <SelectItem
                               key={opt.value}
                               value={opt.value}
-                              className={
-                                opt.value === "Active"
-                                  ? "text-emerald-600 font-bold"
-                                  : "text-rose-600 font-bold"
-                              }
+                              className={opt.value === "Active" ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}
                             >
                               {opt.label}
                             </SelectItem>
@@ -194,25 +201,33 @@ export default function ManageClassDetails({
                 </FormField>
               </div>
             </FormSection>
+
+            {submitError && (
+              <p className="text-[11px] font-bold text-rose-500 text-center">{submitError}</p>
+            )}
           </form>
         </div>
 
         <SheetFooter className="p-8 bg-card border-t flex flex-row items-center justify-end gap-3">
           <SheetClose asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              className="rounded-xl font-bold text-muted-foreground"
-            >
+            <Button type="button" variant="ghost" className="rounded-xl font-bold text-muted-foreground" disabled={isSubmitting}>
               Cancel
             </Button>
           </SheetClose>
           <Button
             type="submit"
             form="class-form"
+            disabled={isSubmitting}
             className="rounded-xl bg-primary px-8 font-black shadow-lg shadow-primary/20 hover:shadow-xl transition-all"
           >
-            {classData ? "Update Class" : "Add Class"}
+            {isSubmitting ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {classData ? "Updating..." : "Adding..."}
+              </span>
+            ) : (
+              classData ? "Update Class" : "Add Class"
+            )}
           </Button>
         </SheetFooter>
       </SheetContent>
@@ -220,46 +235,24 @@ export default function ManageClassDetails({
   );
 }
 
-function FormSection({
-  title,
-  icon: Icon,
-  children,
-}: {
-  title: string;
-  icon: LucideIcon;
-  children: React.ReactNode;
-}) {
+function FormSection({ title, icon: Icon, children }: { title: string; icon: LucideIcon; children: React.ReactNode }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <Icon className="w-4 h-4 text-[oklch(0.7686_0.1647_70.0804)]" />
-        <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground/40">
-          {title}
-        </h3>
+        <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground/40">{title}</h3>
       </div>
       <div className="grid grid-cols-1 gap-4">{children}</div>
     </div>
   );
 }
 
-function FormField({
-  label,
-  error,
-  children,
-}: {
-  label: string;
-  error?: string;
-  children: React.ReactNode;
-}) {
+function FormField({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
   return (
     <div className="grid gap-2">
-      <Label className="text-[13px] font-bold text-foreground/70 ml-1">
-        {label}
-      </Label>
+      <Label className="text-[13px] font-bold text-foreground/70 ml-1">{label}</Label>
       {children}
-      {error && (
-        <p className="text-[11px] font-bold text-rose-500 ml-1">{error}</p>
-      )}
+      {error && <p className="text-[11px] font-bold text-rose-500 ml-1">{error}</p>}
     </div>
   );
 }

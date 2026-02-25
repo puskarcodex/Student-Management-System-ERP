@@ -1,22 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { GenericTable } from "@/components/GenericTable/generic-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar, UserCheck, UserX, Clock, Plus } from "lucide-react";
+import { Calendar, UserCheck, UserX, Clock, Plus, Loader2 } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { Attendance } from "@/lib/types";
 import ManageAttendanceDetails from "@/components/attendance/studentsattendance-details";
-
-const MOCK_ATTENDANCE: Attendance[] = [
-  { id: 1, name: "Rahul Sharma",  entityType: "Student", entityId: 1, classId: "Class 5", date: "2024-03-01", status: "Present" },
-  { id: 2, name: "Ananya Verma",  entityType: "Student", entityId: 2, classId: "Class 5", date: "2024-03-01", status: "Absent"  },
-  { id: 3, name: "Rohan Karki",   entityType: "Student", entityId: 3, classId: "Class 5", date: "2024-03-01", status: "Leave"   },
-  { id: 4, name: "Sita Thapa",    entityType: "Student", entityId: 4, classId: "Class 9", date: "2024-03-02", status: "Present" },
-  { id: 5, name: "Hari Bahadur",  entityType: "Student", entityId: 5, classId: "Class 9", date: "2024-03-02", status: "Present" },
-];
+import { attendanceApi } from "@/lib/api";
 
 const columns: ColumnDef<Attendance>[] = [
   {
@@ -45,7 +38,7 @@ const columns: ColumnDef<Attendance>[] = [
         Leave:   "bg-[oklch(0.7686_0.1647_70.0804)]/10 text-[oklch(0.7686_0.1647_70.0804)]",
       };
       return (
-        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${styles[status]}`}>
+        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${styles[status] ?? ""}`}>
           {status}
         </span>
       );
@@ -54,9 +47,26 @@ const columns: ColumnDef<Attendance>[] = [
 ];
 
 export default function StudentsAttendance() {
-  const [records, setRecords] = useState<Attendance[]>(MOCK_ATTENDANCE);
+  const [records, setRecords] = useState<Attendance[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [selectedAttendance, setSelectedAttendance] = useState<Attendance | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchRecords = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const res = await attendanceApi.getByEntityType("Student", { page: 1, limit: 200 });
+      setRecords(res.data ?? []);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load attendance");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchRecords(); }, [fetchRecords]);
 
   const presentCount = records.filter((r) => r.status === "Present").length;
   const absentCount  = records.filter((r) => r.status === "Absent").length;
@@ -65,6 +75,20 @@ export default function StudentsAttendance() {
   const handleEdit = (attendance: Attendance) => {
     setSelectedAttendance(attendance);
     setIsOpen(true);
+  };
+
+  const handleDelete = async (row: Attendance) => {
+    try {
+      await attendanceApi.delete(row.id);
+      setRecords((prev) => prev.filter((r) => r.id !== row.id));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete");
+    }
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (!open) fetchRecords();
   };
 
   return (
@@ -85,9 +109,9 @@ export default function StudentsAttendance() {
         </div>
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard title="Present" value={String(presentCount)} icon={UserCheck} variant="green"  />
-          <StatCard title="Absent"  value={String(absentCount)}  icon={UserX}     variant="amber"  />
-          <StatCard title="Leave"   value={String(leaveCount)}   icon={Clock}     variant="purple" />
+          <StatCard title="Present" value={isLoading ? "..." : String(presentCount)} icon={UserCheck} variant="green"  />
+          <StatCard title="Absent"  value={isLoading ? "..." : String(absentCount)}  icon={UserX}     variant="amber"  />
+          <StatCard title="Leave"   value={isLoading ? "..." : String(leaveCount)}   icon={Clock}     variant="purple" />
         </div>
 
         <Card className="rounded-[2.5rem] border-none shadow-sm overflow-hidden bg-card">
@@ -98,20 +122,32 @@ export default function StudentsAttendance() {
             </div>
           </CardHeader>
           <CardContent className="px-8 pb-8">
-            <GenericTable
-              data={records}
-              columns={columns}
-              onEdit={handleEdit}
-              onDelete={(row) => setRecords(records.filter((r) => r.id !== row.id))}
-              searchKeys={["name", "status"]}
-            />
+            {isLoading ? (
+              <div className="flex items-center justify-center py-20 gap-3 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="text-sm font-medium">Loading attendance...</span>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <p className="text-sm font-bold text-rose-500">{error}</p>
+                <Button variant="outline" onClick={fetchRecords} className="rounded-xl">Retry</Button>
+              </div>
+            ) : (
+              <GenericTable
+                data={records}
+                columns={columns}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                searchKeys={["name", "status"]}
+              />
+            )}
           </CardContent>
         </Card>
       </main>
 
       <ManageAttendanceDetails
         isOpen={isOpen}
-        onOpenChange={setIsOpen}
+        onOpenChange={handleOpenChange}
         attendance={selectedAttendance}
       />
     </div>

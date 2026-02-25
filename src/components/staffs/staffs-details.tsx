@@ -3,8 +3,8 @@
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
-import { useEffect, useRef } from "react";
-import { Users, User, Camera } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Users, User, Camera, Loader2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ import {
   STAFF_DEPARTMENT_OPTIONS,
 } from "@/lib/dropdown-options";
 import type { Staff } from "@/lib/types";
+import { staffApi } from "@/lib/api";
 
 type FormData = {
   name: string;
@@ -64,14 +65,15 @@ interface StaffDetailsProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   staff?: Staff | null;
-  onSave?: (data: Staff) => void;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyControl = any;
 
-export default function StaffDetails({ isOpen, onOpenChange, staff, onSave }: StaffDetailsProps) {
+export default function StaffDetails({ isOpen, onOpenChange, staff }: StaffDetailsProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const {
     register,
@@ -91,6 +93,7 @@ export default function StaffDetails({ isOpen, onOpenChange, staff, onSave }: St
 
   useEffect(() => {
     if (!isOpen) return;
+    setSubmitError(null);
     if (staff) {
       reset({
         name:       staff.name,
@@ -123,14 +126,26 @@ export default function StaffDetails({ isOpen, onOpenChange, staff, onSave }: St
     reader.readAsDataURL(file);
   };
 
-  const onSubmit = (data: FormData) => {
-    const payload: Staff = {
-      ...(staff ?? { id: Date.now() }),
-      ...data,
-      photo: (photoValue as string | undefined) ?? staff?.photo,
-    };
-    onSave?.(payload);
-    onOpenChange(false);
+  const onSubmit = async (data: FormData) => {
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      const payload = {
+        ...data,
+        status: data.status as "Active" | "Inactive",
+        photo: (photoValue as string | undefined) ?? staff?.photo,
+      };
+      if (staff) {
+        await staffApi.update(staff.id, payload);
+      } else {
+        await staffApi.create(payload);
+      }
+      onOpenChange(false);
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -282,21 +297,32 @@ export default function StaffDetails({ isOpen, onOpenChange, staff, onSave }: St
               </FormField>
             </FormSection>
 
+            {submitError && (
+              <p className="text-[11px] font-bold text-rose-500 text-center">{submitError}</p>
+            )}
           </form>
         </div>
 
         <SheetFooter className="p-8 bg-card border-t flex flex-row items-center justify-end gap-3">
           <SheetClose asChild>
-            <Button type="button" variant="ghost" className="rounded-xl font-bold text-muted-foreground">
+            <Button type="button" variant="ghost" className="rounded-xl font-bold text-muted-foreground" disabled={isSubmitting}>
               Cancel
             </Button>
           </SheetClose>
           <Button
             type="submit"
             form="staff-form"
+            disabled={isSubmitting}
             className="rounded-xl bg-primary px-8 font-black shadow-lg shadow-primary/20 hover:shadow-xl transition-all"
           >
-            {staff ? "Update Staff" : "Add Staff"}
+            {isSubmitting ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {staff ? "Updating..." : "Adding..."}
+              </span>
+            ) : (
+              staff ? "Update Staff" : "Add Staff"
+            )}
           </Button>
         </SheetFooter>
       </SheetContent>

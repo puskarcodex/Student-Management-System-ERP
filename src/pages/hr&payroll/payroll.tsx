@@ -1,37 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { GenericTable } from "@/components/GenericTable/generic-table";
 import PayrollDetails from "@/components/hr&payroll/payroll-details";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Wallet, Clock, PauseCircle, Plus } from "lucide-react";
+import { Wallet, Clock, PauseCircle, Plus, Loader2 } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { Payroll } from "@/lib/types";
-
-const MOCK_PAYROLL: Payroll[] = [
-  {
-    id: 1, employeeId: 101, employeeName: "Sita Rai", employeeType: "Teacher",
-    month: "2024-03", basicSalary: 25000, allowances: 3000, deductions: 1500,
-    netSalary: 26500, paymentDate: "2024-03-31", status: "Paid",
-  },
-  {
-    id: 2, employeeId: 102, employeeName: "Ram Thapa", employeeType: "Staff",
-    month: "2024-03", basicSalary: 18000, allowances: 2000, deductions: 1000,
-    netSalary: 19000, status: "Pending",
-  },
-  {
-    id: 3, employeeId: 103, employeeName: "Priya Shrestha", employeeType: "Teacher",
-    month: "2024-03", basicSalary: 28000, allowances: 4000, deductions: 2000,
-    netSalary: 30000, status: "On Hold",
-  },
-  {
-    id: 4, employeeId: 104, employeeName: "Bikash Karki", employeeType: "Staff",
-    month: "2024-03", basicSalary: 15000, allowances: 1500, deductions: 800,
-    netSalary: 15700, status: "Pending",
-  },
-];
+import { payrollApi } from "@/lib/api";
 
 const columns: ColumnDef<Payroll>[] = [
   {
@@ -49,9 +27,7 @@ const columns: ColumnDef<Payroll>[] = [
   {
     accessorKey: "month",
     header: "Month",
-    cell: (info) => (
-      <span className="text-sm font-bold text-muted-foreground">{String(info.getValue())}</span>
-    ),
+    cell: (info) => <span className="text-sm font-bold text-muted-foreground">{String(info.getValue())}</span>,
   },
   {
     accessorKey: "basicSalary",
@@ -84,7 +60,7 @@ const columns: ColumnDef<Payroll>[] = [
         "On Hold": "bg-[oklch(0.6056_0.2189_292.7172)]/10 text-[oklch(0.6056_0.2189_292.7172)]",
       };
       return (
-        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${styles[status]}`}>
+        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${styles[status] ?? ""}`}>
           {status}
         </span>
       );
@@ -93,23 +69,45 @@ const columns: ColumnDef<Payroll>[] = [
 ];
 
 export default function PayrollPage() {
-  const [records, setRecords] = useState<Payroll[]>(MOCK_PAYROLL);
+  const [records, setRecords] = useState<Payroll[]>([]);
   const [selected, setSelected] = useState<Payroll | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchRecords = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const res = await payrollApi.getAll({ page: 1, limit: 200 });
+      setRecords(res.data ?? []);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load payroll");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchRecords(); }, [fetchRecords]);
 
   const totalDisbursed = records.filter((r) => r.status === "Paid").reduce((sum, r) => sum + r.netSalary, 0);
   const totalPending   = records.filter((r) => r.status === "Pending").reduce((sum, r) => sum + r.netSalary, 0);
   const onHoldCount    = records.filter((r) => r.status === "On Hold").length;
 
   const handleEdit   = (row: Payroll) => { setSelected(row); setIsOpen(true); };
-  const handleDelete = (row: Payroll) => setRecords(records.filter((r) => r.id !== row.id));
 
-  const handleSave = (data: Payroll) => {
-    setRecords(records.map((r) => r.id === data.id ? data : r));
+  const handleDelete = async (row: Payroll) => {
+    try {
+      await payrollApi.delete(row.id);
+      setRecords((prev) => prev.filter((r) => r.id !== row.id));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete");
+    }
   };
 
-  const handleCreate = (data: Omit<Payroll, "id">) => {
-    setRecords([...records, { ...data, id: Date.now() }]);
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (!open) fetchRecords();
   };
 
   return (
@@ -125,42 +123,49 @@ export default function PayrollPage() {
             onClick={() => { setSelected(null); setIsOpen(true); }}
             className="rounded-2xl bg-primary px-6 py-6 h-auto font-bold shadow-lg shadow-primary/20 hover:shadow-xl hover:-translate-y-1 transition-all gap-2"
           >
-            <Plus className="w-5 h-5" />
-            Add Payroll
+            <Plus className="w-5 h-5" /> Add Payroll
           </Button>
         </div>
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard title="Total Disbursed"  value={`Rs. ${totalDisbursed.toLocaleString()}`} icon={Wallet}      variant="green"  />
-          <StatCard title="Pending Salaries" value={`Rs. ${totalPending.toLocaleString()}`}   icon={Clock}       variant="amber"  />
-          <StatCard title="On Hold"          value={String(onHoldCount)}                       icon={PauseCircle} variant="purple" />
+          <StatCard title="Total Disbursed"  value={isLoading ? "..." : `Rs. ${totalDisbursed.toLocaleString()}`} icon={Wallet}      variant="green"  />
+          <StatCard title="Pending Salaries" value={isLoading ? "..." : `Rs. ${totalPending.toLocaleString()}`}   icon={Clock}       variant="amber"  />
+          <StatCard title="On Hold"          value={isLoading ? "..." : String(onHoldCount)}                       icon={PauseCircle} variant="purple" />
         </div>
 
         <Card className="rounded-[2.5rem] border-none shadow-sm overflow-hidden bg-card">
           <CardHeader className="px-8 pt-8 flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-xl font-bold tracking-tight">Salary Register</CardTitle>
-            <div className="text-xs font-bold text-muted-foreground/50 uppercase tracking-widest">
-              Showing {records.length} Records
-            </div>
+            <div className="text-xs font-bold text-muted-foreground/50 uppercase tracking-widest">Showing {records.length} Records</div>
           </CardHeader>
           <CardContent className="px-8 pb-8">
-            <GenericTable
-              data={records}
-              columns={columns}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              searchKeys={["employeeName", "employeeType", "status"]}
-            />
+            {isLoading ? (
+              <div className="flex items-center justify-center py-20 gap-3 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="text-sm font-medium">Loading payroll...</span>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <p className="text-sm font-bold text-rose-500">{error}</p>
+                <Button variant="outline" onClick={fetchRecords} className="rounded-xl">Retry</Button>
+              </div>
+            ) : (
+              <GenericTable
+                data={records}
+                columns={columns}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                searchKeys={["employeeName", "employeeType", "status"]}
+              />
+            )}
           </CardContent>
         </Card>
       </main>
 
       <PayrollDetails
         isOpen={isOpen}
-        onOpenChange={setIsOpen}
+        onOpenChange={handleOpenChange}
         payroll={selected}
-        onSave={handleSave}
-        onCreate={handleCreate}
       />
     </div>
   );
@@ -173,7 +178,6 @@ function StatCard({ title, value, icon: Icon, variant }: { title: string; value:
     amber:  { bg: "bg-[oklch(0.7686_0.1647_70.0804)]/10 dark:bg-[oklch(0.7686_0.1647_70.0804)]/15",   iconBg: "bg-[oklch(0.7686_0.1647_70.0804)]/20",   iconColor: "text-[oklch(0.7686_0.1647_70.0804)]"   },
     purple: { bg: "bg-[oklch(0.6056_0.2189_292.7172)]/10 dark:bg-[oklch(0.6056_0.2189_292.7172)]/15", iconBg: "bg-[oklch(0.6056_0.2189_292.7172)]/20", iconColor: "text-[oklch(0.6056_0.2189_292.7172)]" },
   }[variant];
-
   return (
     <Card className={`rounded-[2.2rem] border-none shadow-sm p-7 transition-all hover:shadow-md group ${styles.bg}`}>
       <div className="flex items-center justify-between">

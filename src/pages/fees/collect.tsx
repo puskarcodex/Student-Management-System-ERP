@@ -1,68 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { GenericTable } from "@/components/GenericTable/generic-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Wallet, Clock, AlertCircle, Plus, X, Receipt } from "lucide-react";
+import { Wallet, Clock, AlertCircle, Plus, X, Receipt, Loader2 } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { FeeBill, FeeStructure } from "@/lib/types";
 import ManageFeeDetails from "@/components/fees/collect-details";
-
-const mockStructures: FeeStructure[] = [
-  {
-    id: 1, classId: "Class 5", className: "Class 5",
-    recurringItems: [
-      { id: 1, feeHead: "Tuition Fee", amount: 2500, feeType: "Recurring", frequency: "Monthly" },
-      { id: 2, feeHead: "Exam Fee", amount: 500, feeType: "Recurring", frequency: "Quarterly" },
-    ],
-    oneTimeItems: [
-      { id: 3, feeHead: "Tie Fee", amount: 200, feeType: "One-Time" },
-      { id: 4, feeHead: "Belt Fee", amount: 150, feeType: "One-Time" },
-    ],
-    totalAmount: 3350, status: "Active",
-  },
-  {
-    id: 2, classId: "Class 9", className: "Class 9",
-    recurringItems: [
-      { id: 5, feeHead: "Tuition Fee", amount: 4500, feeType: "Recurring", frequency: "Monthly" },
-      { id: 6, feeHead: "Exam Fee", amount: 1000, feeType: "Recurring", frequency: "Quarterly" },
-    ],
-    oneTimeItems: [
-      { id: 7, feeHead: "Admission Fee", amount: 1000, feeType: "One-Time" },
-    ],
-    totalAmount: 6500, status: "Active",
-  },
-];
-
-const mockBills: FeeBill[] = [
-  {
-    id: 1, studentId: 101, studentName: "Rahul Sharma",
-    classId: "Class 5", className: "Class 5",
-    billDate: "2024-03-01", dueDate: "2024-03-15",
-    feeItems: [
-      { id: 1, feeHead: "Tuition Fee", amount: 2500, feeType: "Recurring", frequency: "Monthly" },
-      { id: 2, feeHead: "Tie Fee", amount: 200, feeType: "One-Time" },
-    ],
-    totalAmount: 2700, paidAmount: 2700, balanceAmount: 0, status: "Paid",
-  },
-  {
-    id: 2, studentId: 102, studentName: "Ananya Verma",
-    classId: "Class 9", className: "Class 9",
-    billDate: "2024-03-01", dueDate: "2024-03-15",
-    feeItems: [
-      { id: 5, feeHead: "Tuition Fee", amount: 4500, feeType: "Recurring", frequency: "Monthly" },
-      { id: 6, feeHead: "Exam Fee", amount: 1000, feeType: "Recurring", frequency: "Quarterly" },
-    ],
-    totalAmount: 5500, paidAmount: 2000, balanceAmount: 3500, status: "Partial",
-  },
-];
+import { feeBillsApi, feeStructureApi } from "@/lib/api";
 
 const columns: ColumnDef<FeeBill>[] = [
   { accessorKey: "studentName", header: "Student" },
-  { accessorKey: "className", header: "Class" },
-  { accessorKey: "totalAmount", header: "Total", cell: (info) => `Rs. ${info.getValue()}` },
+  { accessorKey: "className",   header: "Class"   },
+  { accessorKey: "totalAmount", header: "Total",   cell: (info) => `Rs. ${info.getValue()}` },
   {
     accessorKey: "balanceAmount",
     header: "Balance",
@@ -84,7 +36,7 @@ const columns: ColumnDef<FeeBill>[] = [
         Overdue: "bg-rose-500/10 text-rose-600",
       };
       return (
-        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${styles[status]}`}>
+        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${styles[status] ?? ""}`}>
           {status}
         </span>
       );
@@ -93,17 +45,90 @@ const columns: ColumnDef<FeeBill>[] = [
 ];
 
 export default function FeeBilling() {
-  const [bills, setBills] = useState<FeeBill[]>(mockBills);
+  const [bills, setBills]             = useState<FeeBill[]>([]);
+  const [structures, setStructures]   = useState<FeeStructure[]>([]);
   const [receiptBill, setReceiptBill] = useState<FeeBill | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen]           = useState(false);
   const [selectedBill, setSelectedBill] = useState<FeeBill | null>(null);
+  const [isLoading, setIsLoading]     = useState(true);
+  const [error, setError]             = useState<string | null>(null);
 
-  const handleEdit = (bill: FeeBill) => {
-    setSelectedBill(bill);
-    setIsOpen(true);
+
+  const mapStructures = (raw: FeeStructure[]) =>
+    raw.map((s) => {
+      const raw_s = s as unknown as Record<string, unknown>;
+      // Backend may return feeItems (flat) or already-split recurringItems/oneTimeItems
+      const flatItems = (raw_s.feeItems ?? raw_s.FeeItems ?? []) as { feeHead?: string; FeeHead?: string; amount?: number; Amount?: number; feeType?: string; FeeType?: string; frequency?: string; Frequency?: string; id?: number; Id?: number }[];
+      const hasFlat = flatItems.length > 0;
+      return {
+        ...s,
+        recurringItems: hasFlat
+          ? flatItems.filter((i) => (i.feeType ?? i.FeeType) === "Recurring").map((i) => ({
+              id: i.id ?? i.Id ?? 0,
+              feeHead: i.feeHead ?? i.FeeHead ?? "",
+              amount: i.amount ?? i.Amount ?? 0,
+              feeType: "Recurring" as const,
+              frequency: ((i.frequency ?? i.Frequency) ?? "Monthly") as "Monthly" | "Quarterly" | "Yearly",
+            }))
+          : (s.recurringItems ?? []),
+        oneTimeItems: hasFlat
+          ? flatItems.filter((i) => (i.feeType ?? i.FeeType) === "One-Time").map((i) => ({
+              id: i.id ?? i.Id ?? 0,
+              feeHead: i.feeHead ?? i.FeeHead ?? "",
+              amount: i.amount ?? i.Amount ?? 0,
+              feeType: "One-Time" as const,
+            }))
+          : (s.oneTimeItems ?? []),
+      };
+    });
+  const fetchData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const [billsRes, structuresRes] = await Promise.all([
+        feeBillsApi.getAll({ page: 1, limit: 200 }),
+        feeStructureApi.getAll({ page: 1, limit: 100 }),
+      ]);
+      // Map Fee entity shape -> FeeBill shape
+      const bills = (billsRes.data ?? []).map((b) => {
+        const raw = b as unknown as Record<string, unknown>;
+        return {
+          ...b,
+          // backend returns `amount` — map to totalAmount/balanceAmount
+          totalAmount:   Number(raw.totalAmount   ?? raw.amount ?? 0),
+          paidAmount:    Number(raw.paidAmount     ?? 0),
+          balanceAmount: Number(raw.balanceAmount  ?? raw.amount ?? 0),
+          className:     String(raw.className      ?? raw.classId ?? ""),
+          billDate:      String(raw.billDate       ?? raw.createdAt ?? ""),
+          feeItems:      (raw.feeItems as unknown[] ?? []),
+        } as FeeBill;
+      });
+      setBills(bills);
+      setStructures(mapStructures(structuresRes.data ?? []));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleEdit = (bill: FeeBill) => { setSelectedBill(bill); setIsOpen(true); };
+
+  const handleDelete = async (bill: FeeBill) => {
+    try {
+      await feeBillsApi.delete(bill.id);
+      setBills((prev) => prev.filter((b) => b.id !== bill.id));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete");
+    }
   };
 
-  const handleDelete = (bill: FeeBill) => setBills(bills.filter((b) => b.id !== bill.id));
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (!open) fetchData();
+  };
 
   const totalCollected = bills.reduce((sum, b) => sum + b.paidAmount, 0);
   const totalPending   = bills.reduce((sum, b) => sum + b.balanceAmount, 0);
@@ -112,7 +137,6 @@ export default function FeeBilling() {
   return (
     <div className="p-4 md:px-8 md:pt-2 md:pb-8 bg-muted/30 min-h-screen">
       <main className="space-y-8">
-
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 ml-1 mt-2">
           <div>
             <h1 className="text-4xl font-extrabold tracking-tight text-foreground">Collect Fees</h1>
@@ -122,55 +146,60 @@ export default function FeeBilling() {
             onClick={() => { setSelectedBill(null); setIsOpen(true); }}
             className="rounded-2xl bg-primary px-6 py-6 h-auto font-bold shadow-lg shadow-primary/20 hover:shadow-xl hover:-translate-y-1 transition-all gap-2"
           >
-            <Plus className="w-5 h-5" />
-            Create Bill
+            <Plus className="w-5 h-5" /> Create Bill
           </Button>
         </div>
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard title="Total Collected" value={`Rs. ${totalCollected}`} icon={Wallet}      variant="green"  />
-          <StatCard title="Pending Amount"  value={`Rs. ${totalPending}`}   icon={Clock}       variant="amber"  />
-          <StatCard title="Overdue Bills"   value={String(overdueCount)}    icon={AlertCircle} variant="purple" />
+          <StatCard title="Total Collected" value={isLoading ? "..." : `Rs. ${totalCollected}`} icon={Wallet}       variant="green"  />
+          <StatCard title="Pending Amount"  value={isLoading ? "..." : `Rs. ${totalPending}`}   icon={Clock}        variant="amber"  />
+          <StatCard title="Overdue Bills"   value={isLoading ? "..." : String(overdueCount)}     icon={AlertCircle}  variant="purple" />
         </div>
 
         <Card className="rounded-[2.5rem] border-none shadow-sm overflow-hidden bg-card">
           <CardHeader className="px-8 pt-8 flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-xl font-bold tracking-tight">Recent Invoices</CardTitle>
-            <div className="text-xs font-bold text-muted-foreground/50 uppercase tracking-widest">
-              Showing {bills.length} Bills
-            </div>
+            <div className="text-xs font-bold text-muted-foreground/50 uppercase tracking-widest">Showing {bills.length} Bills</div>
           </CardHeader>
           <CardContent className="px-8 pb-8">
-            <GenericTable
-              data={bills}
-              columns={columns}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              onView={(bill) => setReceiptBill(bill)}
-              searchKeys={["studentName", "className", "status"]}
-            />
+            {isLoading ? (
+              <div className="flex items-center justify-center py-20 gap-3 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="text-sm font-medium">Loading bills...</span>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <p className="text-sm font-bold text-rose-500">{error}</p>
+                <Button variant="outline" onClick={fetchData} className="rounded-xl">Retry</Button>
+              </div>
+            ) : (
+              <GenericTable
+                data={bills}
+                columns={columns}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onView={(bill) => setReceiptBill(bill)}
+                searchKeys={["studentName", "className", "status"]}
+              />
+            )}
           </CardContent>
         </Card>
       </main>
 
       <ManageFeeDetails
         isOpen={isOpen}
-        onOpenChange={setIsOpen}
+        onOpenChange={handleOpenChange}
         bill={selectedBill}
-        structures={mockStructures}
+        structures={structures}
       />
 
       {/* Receipt Modal */}
       {receiptBill && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="bg-card rounded-[2.5rem] shadow-2xl p-8 w-full max-w-sm mx-4 relative">
-            <button
-              onClick={() => setReceiptBill(null)}
-              className="absolute top-5 right-5 p-2 rounded-xl hover:bg-muted transition-colors"
-            >
+            <button onClick={() => setReceiptBill(null)} className="absolute top-5 right-5 p-2 rounded-xl hover:bg-muted transition-colors">
               <X className="w-4 h-4 text-muted-foreground" />
             </button>
-
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2.5 bg-primary/10 rounded-xl">
                 <Receipt className="w-5 h-5 text-primary" />
@@ -180,10 +209,9 @@ export default function FeeBilling() {
                 <p className="text-xs font-bold text-muted-foreground/60 uppercase tracking-widest">{receiptBill.className}</p>
               </div>
             </div>
-
             <div className="space-y-2 mb-6">
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 mb-3">Fee Breakdown</p>
-              {receiptBill.feeItems.map((item) => (
+              {(receiptBill.feeItems ?? []).map((item) => (
                 <div key={item.id} className="flex items-center justify-between py-2 border-b border-border/40">
                   <span className="text-sm font-medium text-muted-foreground">
                     {item.feeHead}
@@ -193,7 +221,6 @@ export default function FeeBilling() {
                 </div>
               ))}
             </div>
-
             <div className="space-y-2 pt-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-bold text-muted-foreground">Total</span>
@@ -210,13 +237,12 @@ export default function FeeBilling() {
                 </span>
               </div>
             </div>
-
             <div className="mt-6 flex justify-center">
               <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest ${
                 receiptBill.status === "Paid"    ? "bg-emerald-500/10 text-emerald-600" :
-                receiptBill.status === "Partial" ? "bg-blue-500/10 text-blue-600" :
-                receiptBill.status === "Pending" ? "bg-amber-500/10 text-amber-600" :
-                "bg-rose-500/10 text-rose-600"
+                receiptBill.status === "Partial" ? "bg-blue-500/10 text-blue-600"       :
+                receiptBill.status === "Pending" ? "bg-amber-500/10 text-amber-600"     :
+                                                    "bg-rose-500/10 text-rose-600"
               }`}>
                 {receiptBill.status}
               </span>
@@ -235,7 +261,6 @@ function StatCard({ title, value, icon: Icon, variant }: { title: string; value:
     amber:  { bg: "bg-[oklch(0.7686_0.1647_70.0804)]/10 dark:bg-[oklch(0.7686_0.1647_70.0804)]/15",   iconBg: "bg-[oklch(0.7686_0.1647_70.0804)]/20",   iconColor: "text-[oklch(0.7686_0.1647_70.0804)]"   },
     purple: { bg: "bg-[oklch(0.6056_0.2189_292.7172)]/10 dark:bg-[oklch(0.6056_0.2189_292.7172)]/15", iconBg: "bg-[oklch(0.6056_0.2189_292.7172)]/20", iconColor: "text-[oklch(0.6056_0.2189_292.7172)]" },
   }[variant];
-
   return (
     <Card className={`rounded-[2.2rem] border-none shadow-sm p-7 transition-all hover:shadow-md group ${styles.bg}`}>
       <div className="flex items-center justify-between">

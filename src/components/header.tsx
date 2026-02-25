@@ -27,10 +27,10 @@ const breadcrumbMap: Record<string, { parent?: string; current: string }> = {
   "/classes": { current: "Class List" },
   "/classes/sections": { parent: "Classes", current: "Section Management" },
   "/subjects": { current: "Subject List" },
-  "/subjects/teacher-assignment": {
-    parent: "Subjects",
-    current: "Teacher Assignment",
-  },
+  // "/subjects/teacher-assignment": {
+  //   parent: "Subjects",
+  //   current: "Teacher Assignment",
+  // },
   "/attendance": { current: "Students Attendance" },
   "/attendance/teachersattendance": {
     parent: "Attendance",
@@ -63,10 +63,10 @@ const featureMap: Record<string, { label: string; path: string }[]> = {
     { label: "Staff List", path: "/staff" },
     { label: "Roles", path: "/staff/roles" },
   ],
-  "/subjects": [
-    { label: "Subjects", path: "/subjects" },
-    { label: "Teacher Assignment", path: "/subjects/teacher-assignment" },
-  ],
+  // "/subjects": [
+  //   { label: "Subjects", path: "/subjects" },
+  //   // { label: "Teacher Assignment", path: "/subjects/teacher-assignment" },
+  // ],
   "/fees": [
     { label: "Fees Setup", path: "/fees" },
     { label: "Collect", path: "/fees/collect" },

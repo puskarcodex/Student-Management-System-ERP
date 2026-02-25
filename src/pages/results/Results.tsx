@@ -1,28 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { GenericTable } from "@/components/GenericTable/generic-table";
 import ManageResultDetails from "@/components/results/results-details";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { FileText, Percent, Award, Plus } from "lucide-react";
+import { FileText, Percent, Award, Plus, Loader2 } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { Result } from "@/lib/types";
+import { resultsApi } from "@/lib/api";
 
-const mockResults: Result[] = [
-  { id: 1, studentId: 1, studentName: "Rahul Sharma", className: "10", totalMarks: 440, percentage: 88, result: "Pass" },
-  { id: 2, studentId: 2, studentName: "Ananya Verma", className: "9", totalMarks: 215, percentage: 43, result: "Fail" },
-];
-
-const columns: ColumnDef<Result>[] = [
+const columns: ColumnDef<r>[] = [
   { accessorKey: "studentName", header: "Student Name" },
   { accessorKey: "studentId", header: "Student ID" },
-  { accessorKey: "class", header: "Class" },
+  { accessorKey: "className", header: "Class" },
   { accessorKey: "totalMarks", header: "Total Marks" },
   { accessorKey: "percentage", header: "Percentage", cell: (info) => `${info.getValue()}%` },
   {
-    accessorKey: "result",
+    accessorKey: "resultStatus",
     header: "Result",
     cell: (info) => (
       <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${info.getValue() === "Pass" ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-600"}`}>
@@ -34,9 +30,26 @@ const columns: ColumnDef<Result>[] = [
 
 export default function Results() {
   const [isManage, setIsManage] = useState(false);
-  const [results, setResults] = useState<Result[]>(mockResults);
+  const [results, setResults] = useState<Result[]>([]);
   const [selectedResult, setSelectedResult] = useState<Result | null>(null);
   const [mode, setMode] = useState<"add" | "edit" | "view">("add");
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchResults = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const res = await resultsApi.getAll({ page: 1, limit: 100 });
+      setResults(res.data ?? []);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load results");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchResults(); }, [fetchResults]);
 
   const handleView = (result: Result) => {
     setSelectedResult(result);
@@ -50,8 +63,18 @@ export default function Results() {
     setIsManage(true);
   };
 
-  const handleDelete = (result: Result) => {
-    setResults(results.filter((r) => r.id !== result.id));
+  const handleDelete = async (result: Result) => {
+    try {
+      await resultsApi.delete(result.id);
+      setResults((prev) => prev.filter((r) => r.id !== result.id));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete result");
+    }
+  };
+
+  const handleManageClose = (open: boolean) => {
+    setIsManage(open);
+    if (!open) fetchResults();
   };
 
   const avgPercentage =
@@ -79,9 +102,9 @@ export default function Results() {
         </div>
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard title="Total Results" value={String(results.length)} icon={FileText} variant="green" />
-          <StatCard title="Average Percentage" value={`${avgPercentage}%`} icon={Percent} variant="blue" />
-          <StatCard title="Top Score" value={`${topPercentage}%`} icon={Award} variant="purple" />
+          <StatCard title="Total Results" value={isLoading ? "..." : String(results.length)} icon={FileText} variant="green" />
+          <StatCard title="Average Percentage" value={isLoading ? "..." : `${avgPercentage}%`} icon={Percent} variant="blue" />
+          <StatCard title="Top Score" value={isLoading ? "..." : `${topPercentage}%`} icon={Award} variant="purple" />
         </div>
 
         <Card className="rounded-[2.5rem] border-none shadow-sm overflow-hidden bg-card">
@@ -92,21 +115,33 @@ export default function Results() {
             </div>
           </CardHeader>
           <CardContent className="px-8 pb-8">
-            <GenericTable
-              data={results}
-              columns={columns}
-              onView={handleView}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              searchKeys={["studentName", "className"]}
-            />
+            {isLoading ? (
+              <div className="flex items-center justify-center py-20 gap-3 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="text-sm font-medium">Loading results...</span>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <p className="text-sm font-bold text-rose-500">{error}</p>
+                <Button variant="outline" onClick={fetchResults} className="rounded-xl">Retry</Button>
+              </div>
+            ) : (
+              <GenericTable
+                data={results}
+                columns={columns}
+                onView={handleView}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                searchKeys={["studentName", "className"]}
+              />
+            )}
           </CardContent>
         </Card>
       </main>
 
       <ManageResultDetails
         isOpen={isManage}
-        onOpenChange={setIsManage}
+        onOpenChange={handleManageClose}
         result={selectedResult}
         mode={mode}
       />

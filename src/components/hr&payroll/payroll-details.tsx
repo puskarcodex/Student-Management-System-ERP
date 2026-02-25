@@ -3,47 +3,31 @@
 import { useForm, Controller, useWatch } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
-import { useEffect } from "react";
-import { Wallet, User, Calculator } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Wallet, User, Calculator, Loader2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
+  Sheet, SheetClose, SheetContent, SheetDescription,
+  SheetFooter, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
 import { NepaliDatePickerField } from "@/components/common/NepaliDatePicekrField";
-import type { Payroll } from "@/lib/types";
-
-// Mock employees — replace with real data from API later
-const ALL_EMPLOYEES = [
-  { id: 101, name: "Sita Rai",       type: "Teacher" as const },
-  { id: 102, name: "Ram Thapa",      type: "Staff"   as const },
-  { id: 103, name: "Priya Shrestha", type: "Teacher" as const },
-  { id: 104, name: "Bikash Karki",   type: "Staff"   as const },
-  { id: 201, name: "Asmita Gurung",  type: "Teacher" as const },
-  { id: 202, name: "Dipak Magar",    type: "Staff"   as const },
-];
+import type { Payroll, Teacher, Staff } from "@/lib/types";
+import { payrollApi, teachersApi, staffApi } from "@/lib/api";
 
 const MONTH_OPTIONS = [
   "2024-01","2024-02","2024-03","2024-04","2024-05","2024-06",
   "2024-07","2024-08","2024-09","2024-10","2024-11","2024-12",
 ];
+
+type Employee = { id: number; name: string; type: "Teacher" | "Staff" };
 
 type FormData = {
   employeeType: "Teacher" | "Staff";
@@ -73,37 +57,31 @@ interface PayrollDetailsProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   payroll?: Payroll | null;
-  onSave?: (data: Payroll) => void;
-  onCreate?: (data: Omit<Payroll, "id">) => void;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyControl = any;
 
-export default function PayrollDetails({
-  isOpen,
-  onOpenChange,
-  payroll,
-  onSave,
-  onCreate,
-}: PayrollDetailsProps) {
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-    control,
-    setValue,
-  } = useForm<FormData>({
+export default function PayrollDetails({ isOpen, onOpenChange, payroll }: PayrollDetailsProps) {
+  const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError]   = useState<string | null>(null);
+
+  useEffect(() => {
+    Promise.all([
+      teachersApi.getAll({ page: 1, limit: 500 }),
+      staffApi.getAll({ page: 1, limit: 500 }),
+    ]).then(([teachersRes, staffRes]) => {
+      const teachers: Employee[] = (teachersRes.data ?? []).map((t: Teacher) => ({ id: t.id, name: t.name, type: "Teacher" as const }));
+      const staff: Employee[]    = (staffRes.data ?? []).map((s: Staff) => ({ id: s.id, name: s.name, type: "Staff" as const }));
+      setAllEmployees([...teachers, ...staff]);
+    }).catch(() => {});
+  }, []);
+
+  const { register, handleSubmit, formState: { errors }, reset, control, setValue } = useForm<FormData>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: yupResolver(schema) as any,
-    defaultValues: {
-      employeeType: "Teacher",
-      status: "Pending",
-      allowances: 0,
-      deductions: 0,
-      basicSalary: 0,
-    },
+    defaultValues: { employeeType: "Teacher", status: "Pending", allowances: 0, deductions: 0, basicSalary: 0 },
   });
 
   const watchedType       = useWatch({ control, name: "employeeType" });
@@ -111,8 +89,7 @@ export default function PayrollDetails({
   const watchedAllowances = useWatch({ control, name: "allowances" });
   const watchedDeductions = useWatch({ control, name: "deductions" });
 
-  // Derived — no useState needed
-  const filteredEmployees = ALL_EMPLOYEES.filter((e) => e.type === watchedType);
+  const filteredEmployees = allEmployees.filter((e) => e.type === watchedType);
   const netSalary = (Number(watchedBasic) || 0) + (Number(watchedAllowances) || 0) - (Number(watchedDeductions) || 0);
 
   const handleEmployeeTypeChange = (type: "Teacher" | "Staff") => {
@@ -124,45 +101,43 @@ export default function PayrollDetails({
 
   const handleEmployeeChange = (name: string) => {
     setValue("employeeName", name);
-    const emp = ALL_EMPLOYEES.find((e) => e.name === name);
+    const emp = allEmployees.find((e) => e.name === name);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (emp) setValue("employeeId", emp.id as any);
   };
 
   useEffect(() => {
     if (!isOpen) return;
+    setSubmitError(null);
     if (payroll) {
       reset({
-        employeeType: payroll.employeeType,
-        employeeId:   payroll.employeeId,
-        employeeName: payroll.employeeName,
-        month:        payroll.month,
-        basicSalary:  payroll.basicSalary,
-        allowances:   payroll.allowances,
-        deductions:   payroll.deductions,
-        paymentDate:  payroll.paymentDate,
-        status:       payroll.status,
+        employeeType: payroll.employeeType, employeeId: payroll.employeeId,
+        employeeName: payroll.employeeName, month: payroll.month,
+        basicSalary: payroll.basicSalary, allowances: payroll.allowances,
+        deductions: payroll.deductions, paymentDate: payroll.paymentDate, status: payroll.status,
       });
     } else {
-      reset({
-        employeeType: "Teacher",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        employeeId: 0 as any,
-        employeeName: "", month: "",
-        basicSalary: 0, allowances: 0, deductions: 0,
-        paymentDate: "", status: "Pending",
-      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      reset({ employeeType: "Teacher", employeeId: 0 as any, employeeName: "", month: "", basicSalary: 0, allowances: 0, deductions: 0, paymentDate: "", status: "Pending" });
     }
   }, [isOpen, payroll, reset]);
 
-  const onSubmit = (data: FormData) => {
-    const payload = { ...data, netSalary };
-    if (payroll) {
-      onSave?.({ ...payload, id: payroll.id });
-    } else {
-      onCreate?.(payload);
+  const onSubmit = async (data: FormData) => {
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      const payload = { ...data, netSalary };
+      if (payroll) {
+        await payrollApi.update(payroll.id, payload);
+      } else {
+        await payrollApi.create(payload);
+      }
+      onOpenChange(false);
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setIsSubmitting(false);
     }
-    onOpenChange(false);
   };
 
   return (
@@ -170,9 +145,7 @@ export default function PayrollDetails({
       <SheetContent className="sm:max-w-lg border-none shadow-2xl p-0 flex flex-col">
         <SheetHeader className="p-8 bg-primary/5">
           <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-primary/10 rounded-xl">
-              <Wallet className="w-5 h-5 text-primary" />
-            </div>
+            <div className="p-2 bg-primary/10 rounded-xl"><Wallet className="w-5 h-5 text-primary" /></div>
             <SheetTitle className="text-2xl font-black tracking-tight text-foreground">
               {payroll ? "Edit Payroll" : "Add Payroll"}
             </SheetTitle>
@@ -185,17 +158,12 @@ export default function PayrollDetails({
         <div className="flex-1 overflow-y-auto px-8 py-6">
           <form id="payroll-form" onSubmit={handleSubmit(onSubmit)} className="space-y-8">
 
-            {/* Employee */}
             <FormSection title="Employee" icon={User}>
               <FormField label="Employee Type" error={errors.employeeType?.message}>
-                <Controller
-                  name="employeeType"
-                  control={control}
+                <Controller name="employeeType" control={control}
                   render={({ field }) => (
                     <Select value={field.value} onValueChange={(v) => handleEmployeeTypeChange(v as "Teacher" | "Staff")}>
-                      <SelectTrigger className="rounded-xl border-muted-foreground/20">
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
+                      <SelectTrigger className="rounded-xl border-muted-foreground/20"><SelectValue placeholder="Select type" /></SelectTrigger>
                       <SelectContent className="rounded-xl">
                         <SelectItem value="Teacher">Teacher</SelectItem>
                         <SelectItem value="Staff">Staff</SelectItem>
@@ -206,14 +174,10 @@ export default function PayrollDetails({
               </FormField>
 
               <FormField label="Employee" error={errors.employeeName?.message}>
-                <Controller
-                  name="employeeName"
-                  control={control}
+                <Controller name="employeeName" control={control}
                   render={({ field }) => (
                     <Select value={field.value} onValueChange={handleEmployeeChange}>
-                      <SelectTrigger className="rounded-xl border-muted-foreground/20">
-                        <SelectValue placeholder="Select employee" />
-                      </SelectTrigger>
+                      <SelectTrigger className="rounded-xl border-muted-foreground/20"><SelectValue placeholder="Select employee" /></SelectTrigger>
                       <SelectContent className="rounded-xl">
                         {filteredEmployees.map((e) => (
                           <SelectItem key={e.id} value={e.name}>{e.name}</SelectItem>
@@ -225,18 +189,12 @@ export default function PayrollDetails({
               </FormField>
 
               <FormField label="Month" error={errors.month?.message}>
-                <Controller
-                  name="month"
-                  control={control}
+                <Controller name="month" control={control}
                   render={({ field }) => (
                     <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger className="rounded-xl border-muted-foreground/20">
-                        <SelectValue placeholder="Select month" />
-                      </SelectTrigger>
+                      <SelectTrigger className="rounded-xl border-muted-foreground/20"><SelectValue placeholder="Select month" /></SelectTrigger>
                       <SelectContent className="rounded-xl">
-                        {MONTH_OPTIONS.map((m) => (
-                          <SelectItem key={m} value={m}>{m}</SelectItem>
-                        ))}
+                        {MONTH_OPTIONS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   )}
@@ -244,37 +202,21 @@ export default function PayrollDetails({
               </FormField>
             </FormSection>
 
-            {/* Salary Breakdown */}
             <FormSection title="Salary Breakdown" icon={Calculator}>
               <FormField label="Basic Salary" error={errors.basicSalary?.message}>
-                <Input
-                  type="number"
-                  {...register("basicSalary")}
-                  placeholder="0"
-                  className="rounded-xl border-muted-foreground/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
+                <Input type="number" {...register("basicSalary")} placeholder="0"
+                  className="rounded-xl border-muted-foreground/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
               </FormField>
-
               <div className="grid grid-cols-2 gap-4">
                 <FormField label="Allowances" error={errors.allowances?.message}>
-                  <Input
-                    type="number"
-                    {...register("allowances")}
-                    placeholder="0"
-                    className="rounded-xl border-muted-foreground/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
+                  <Input type="number" {...register("allowances")} placeholder="0"
+                    className="rounded-xl border-muted-foreground/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                 </FormField>
                 <FormField label="Deductions" error={errors.deductions?.message}>
-                  <Input
-                    type="number"
-                    {...register("deductions")}
-                    placeholder="0"
-                    className="rounded-xl border-muted-foreground/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
+                  <Input type="number" {...register("deductions")} placeholder="0"
+                    className="rounded-xl border-muted-foreground/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                 </FormField>
               </div>
-
-              {/* Live Net Salary */}
               <div className={`flex items-center justify-between p-4 rounded-2xl ${netSalary >= 0 ? "bg-emerald-500/5" : "bg-rose-500/5"}`}>
                 <span className="text-sm font-black uppercase tracking-widest text-muted-foreground/50">Net Salary</span>
                 <span className={`text-2xl font-black ${netSalary >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
@@ -283,7 +225,6 @@ export default function PayrollDetails({
               </div>
             </FormSection>
 
-            {/* Payment */}
             <FormSection title="Payment" icon={Wallet}>
               <NepaliDatePickerField<FormData>
                 name="paymentDate"
@@ -291,25 +232,17 @@ export default function PayrollDetails({
                 label="Payment Date"
                 error={errors.paymentDate?.message}
               />
-
               <FormField label="Status" error={errors.status?.message}>
-                <Controller
-                  name="status"
-                  control={control}
+                <Controller name="status" control={control}
                   render={({ field }) => (
                     <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger className="rounded-xl border-muted-foreground/20">
-                        <SelectValue />
-                      </SelectTrigger>
+                      <SelectTrigger className="rounded-xl border-muted-foreground/20"><SelectValue /></SelectTrigger>
                       <SelectContent className="rounded-xl">
                         {(["Pending", "Paid", "On Hold"] as const).map((s) => (
                           <SelectItem key={s} value={s}
-                            className={
-                              s === "Paid"     ? "text-emerald-600 font-bold" :
-                              s === "On Hold"  ? "text-purple-600 font-bold"  :
-                                                 "text-amber-600 font-bold"
-                            }
-                          >{s}</SelectItem>
+                            className={s === "Paid" ? "text-emerald-600 font-bold" : s === "On Hold" ? "text-purple-600 font-bold" : "text-amber-600 font-bold"}>
+                            {s}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -318,21 +251,26 @@ export default function PayrollDetails({
               </FormField>
             </FormSection>
 
+            {submitError && <p className="text-[11px] font-bold text-rose-500 text-center">{submitError}</p>}
           </form>
         </div>
 
         <SheetFooter className="p-8 bg-card border-t flex flex-row items-center justify-end gap-3">
           <SheetClose asChild>
-            <Button type="button" variant="ghost" className="rounded-xl font-bold text-muted-foreground">
+            <Button type="button" variant="ghost" className="rounded-xl font-bold text-muted-foreground" disabled={isSubmitting}>
               Cancel
             </Button>
           </SheetClose>
-          <Button
-            type="submit"
-            form="payroll-form"
-            className="rounded-xl bg-primary px-8 font-black shadow-lg shadow-primary/20 hover:shadow-xl transition-all"
-          >
-            {payroll ? "Update Payroll" : "Save Payroll"}
+          <Button type="submit" form="payroll-form" disabled={isSubmitting}
+            className="rounded-xl bg-primary px-8 font-black shadow-lg shadow-primary/20 hover:shadow-xl transition-all">
+            {isSubmitting ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {payroll ? "Updating..." : "Saving..."}
+              </span>
+            ) : (
+              payroll ? "Update Payroll" : "Save Payroll"
+            )}
           </Button>
         </SheetFooter>
       </SheetContent>

@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
-import { User, Contact, GraduationCap, Camera, Trash2 } from "lucide-react";
+import { User, Contact, GraduationCap, Camera, Trash2, Loader2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { NepaliDatePickerField } from "@/components/common/NepaliDatePicekrField";
 import type { Student } from "@/lib/types";
+import { studentsApi } from "@/lib/api";
 import {
   CLASS_OPTIONS,
   GENDER_OPTIONS,
@@ -60,6 +61,8 @@ export default function ManageStudentDetails({
   student,
 }: ManageStudentProps) {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -75,20 +78,24 @@ export default function ManageStudentDetails({
 
   useEffect(() => {
     if (!isOpen) return;
+    setSubmitError(null);
 
     if (student) {
+      // Backend returns "class" (reserved word), so access via bracket notation
+      const studentAsAny = student as unknown as Record<string, unknown>;
+      const studentClass = (studentAsAny["class"] as string) ?? "";
+
       reset({
         name:      student.name,
         email:     student.email,
         phone:     student.phone,
         dob:       student.dob,
         studentId: student.studentId,
-        className: student.className,
+        className: studentClass,
         rollNo:    student.rollNo,
         gender:    student.gender ?? "",
         status:    student.status,
       });
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setImagePreview(student.photo ?? null);
     } else {
       reset({
@@ -107,7 +114,10 @@ export default function ManageStudentDetails({
   }, [isOpen, student, reset]);
 
   const handleOpenChange = (open: boolean) => {
-    if (!open) setImagePreview(null);
+    if (!open) {
+      setImagePreview(null);
+      setSubmitError(null);
+    }
     onOpenChange(open);
   };
 
@@ -120,14 +130,34 @@ export default function ManageStudentDetails({
     }
   };
 
-  const onSubmit = (data: FormData) => {
-    const payload: Omit<Student, "id" | "createdAt" | "updatedAt"> = {
-      ...data,
-      photo: imagePreview ?? undefined,
+const onSubmit = async (data: FormData) => {
+  setIsSubmitting(true);
+  setSubmitError(null);
+  try {
+    const payload = {
+      name:      data.name,
+      email:     data.email,
+      phone:     data.phone,
+      dob:       data.dob,
+      studentId: data.studentId,
+      className: data.className,  // api.ts will convert to "class" for backend
+      rollNo:    data.rollNo,
+      gender:    data.gender,
+      status:    data.status as "Active" | "Inactive",
+      photo:     imagePreview ?? undefined,
     };
-    console.log(student ? "Update Student:" : "Create Student:", payload);
+    if (student) {
+      await studentsApi.update(student.id, payload);
+    } else {
+      await studentsApi.create(payload);
+    }
     handleOpenChange(false);
-  };
+  } catch (err: unknown) {
+    setSubmitError(err instanceof Error ? err.message : "Something went wrong");
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   return (
     <Sheet open={isOpen} onOpenChange={handleOpenChange}>
@@ -325,6 +355,11 @@ export default function ManageStudentDetails({
                 </FormField>
               </div>
             </FormSection>
+
+            {/* API error message */}
+            {submitError && (
+              <p className="text-[11px] font-bold text-rose-500 text-center">{submitError}</p>
+            )}
           </form>
         </div>
 
@@ -334,6 +369,7 @@ export default function ManageStudentDetails({
               type="button"
               variant="ghost"
               className="rounded-xl font-bold text-muted-foreground"
+              disabled={isSubmitting}
             >
               Cancel
             </Button>
@@ -341,9 +377,17 @@ export default function ManageStudentDetails({
           <Button
             type="submit"
             form="student-form"
+            disabled={isSubmitting}
             className="rounded-xl bg-primary px-8 font-black shadow-lg shadow-primary/20 hover:shadow-xl transition-all"
           >
-            {student ? "Update Student" : "Register Student"}
+            {isSubmitting ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {student ? "Updating..." : "Registering..."}
+              </span>
+            ) : (
+              student ? "Update Student" : "Register Student"
+            )}
           </Button>
         </SheetFooter>
       </SheetContent>

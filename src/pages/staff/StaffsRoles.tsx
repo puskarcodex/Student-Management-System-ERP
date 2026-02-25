@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Shield, Plus, Trash2, Users, Pencil, Check, X } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
+import { staffApi } from "@/lib/api";
 
 interface Role {
   id: number;
@@ -14,25 +15,30 @@ interface Role {
   staffCount: number;
 }
 
-const MOCK_ROLES: Role[] = [
-  { id: 1, name: "Accountant",    department: "Finance",        staffCount: 2 },
-  { id: 2, name: "Librarian",     department: "Library",        staffCount: 1 },
-  { id: 3, name: "Security Guard",department: "Security",       staffCount: 3 },
-  { id: 4, name: "Receptionist",  department: "Administration", staffCount: 2 },
-  { id: 5, name: "IT Support",    department: "IT",             staffCount: 1 },
-  { id: 6, name: "Driver",        department: "Transport",      staffCount: 2 },
-  { id: 7, name: "Cleaner",       department: "Housekeeping",   staffCount: 4 },
-  { id: 8, name: "Cook",          department: "Kitchen",        staffCount: 2 },
-];
-
 export default function RolesPage() {
-  const [roles, setRoles] = useState<Role[]>(MOCK_ROLES);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editDept, setEditDept] = useState("");
   const [newName, setNewName] = useState("");
   const [newDept, setNewDept] = useState("");
   const [isAdding, setIsAdding] = useState(false);
+
+  // Derive roles from real staff data
+  useEffect(() => {
+    staffApi.getAll({ page: 1, limit: 500 }).then((res) => {
+      const staffList = res.data ?? [];
+      const roleMap = new Map<string, { department: string; staffCount: number; id: number }>();
+      staffList.forEach((s, i) => {
+        if (!roleMap.has(s.role)) {
+          roleMap.set(s.role, { department: s.department, staffCount: 1, id: i + 1 });
+        } else {
+          roleMap.get(s.role)!.staffCount += 1;
+        }
+      });
+      setRoles(Array.from(roleMap.entries()).map(([name, data]) => ({ name, ...data })));
+    }).catch(() => {});
+  }, []);
 
   const totalRoles  = roles.length;
   const totalStaff  = roles.reduce((sum, r) => sum + r.staffCount, 0);
@@ -136,7 +142,6 @@ export default function RolesPage() {
                   className="group flex flex-col gap-3 p-5 rounded-2xl bg-muted/40 hover:bg-muted/60 transition-colors"
                 >
                   {editingId === role.id ? (
-                    // Edit mode
                     <div className="space-y-2">
                       <Input
                         value={editName}
@@ -165,7 +170,6 @@ export default function RolesPage() {
                       </div>
                     </div>
                   ) : (
-                    // View mode
                     <>
                       <div className="flex items-start justify-between">
                         <div>

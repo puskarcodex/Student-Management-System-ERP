@@ -1,37 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { GenericTable } from "@/components/GenericTable/generic-table";
 import StaffDetails from "@/components/staffs/staffs-details";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Users, UserCheck, UserX, Plus } from "lucide-react";
+import { Users, UserCheck, UserX, Plus, Loader2 } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { Staff } from "@/lib/types";
-
-const MOCK_STAFF: Staff[] = [
-  {
-    id: 1, name: "Bimal Shrestha", email: "bimal@school.com", phone: "9801234567",
-    dob: "1985-04-12", staffId: "STF001", role: "Accountant", department: "Finance",
-    gender: "Male", status: "Active",
-  },
-  {
-    id: 2, name: "Kamala Rai", email: "kamala@school.com", phone: "9807654321",
-    dob: "1990-07-22", staffId: "STF002", role: "Librarian", department: "Library",
-    gender: "Female", status: "Active",
-  },
-  {
-    id: 3, name: "Dinesh Karki", email: "dinesh@school.com", phone: "9812345678",
-    dob: "1988-11-05", staffId: "STF003", role: "Security Guard", department: "Security",
-    gender: "Male", status: "Inactive",
-  },
-  {
-    id: 4, name: "Sunita Tamang", email: "sunita@school.com", phone: "9823456789",
-    dob: "1992-03-18", staffId: "STF004", role: "Receptionist", department: "Administration",
-    gender: "Female", status: "Active",
-  },
-];
+import { staffApi } from "@/lib/api";
 
 const columns: ColumnDef<Staff>[] = [
   {
@@ -79,23 +57,44 @@ const columns: ColumnDef<Staff>[] = [
 ];
 
 export default function StaffPage() {
-  const [staff, setStaff] = useState<Staff[]>(MOCK_STAFF);
+  const [staff, setStaff] = useState<Staff[]>([]);
   const [selected, setSelected] = useState<Staff | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const totalStaff  = staff.length;
-  const activeStaff = staff.filter((s) => s.status === "Active").length;
+  const fetchStaff = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const res = await staffApi.getAll({ page: 1, limit: 100 });
+      setStaff(res.data ?? []);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load staff");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchStaff(); }, [fetchStaff]);
+
+  const totalStaff    = staff.length;
+  const activeStaff   = staff.filter((s) => s.status === "Active").length;
   const inactiveStaff = staff.filter((s) => s.status === "Inactive").length;
 
-  const handleEdit = (row: Staff) => { setSelected(row); setIsOpen(true); };
-  const handleDelete = (row: Staff) => setStaff(staff.filter((s) => s.id !== row.id));
-
-  const handleSave = (data: Staff) => {
-    if (staff.find((s) => s.id === data.id)) {
-      setStaff(staff.map((s) => s.id === data.id ? data : s));
-    } else {
-      setStaff([...staff, { ...data, id: Date.now() }]);
+  const handleEdit   = (row: Staff) => { setSelected(row); setIsOpen(true); };
+  const handleDelete = async (row: Staff) => {
+    try {
+      await staffApi.delete(row.id);
+      setStaff((prev) => prev.filter((s) => s.id !== row.id));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete staff");
     }
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (!open) fetchStaff();
   };
 
   return (
@@ -119,9 +118,9 @@ export default function StaffPage() {
 
         {/* Stats */}
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard title="Total Staff"    value={String(totalStaff)}    icon={Users}     variant="blue"   />
-          <StatCard title="Active"         value={String(activeStaff)}   icon={UserCheck} variant="green"  />
-          <StatCard title="Inactive"       value={String(inactiveStaff)} icon={UserX}     variant="amber"  />
+          <StatCard title="Total Staff"    value={isLoading ? "..." : String(totalStaff)}    icon={Users}     variant="blue"   />
+          <StatCard title="Active"         value={isLoading ? "..." : String(activeStaff)}   icon={UserCheck} variant="green"  />
+          <StatCard title="Inactive"       value={isLoading ? "..." : String(inactiveStaff)} icon={UserX}     variant="amber"  />
         </div>
 
         {/* Table */}
@@ -133,22 +132,33 @@ export default function StaffPage() {
             </div>
           </CardHeader>
           <CardContent className="px-8 pb-8">
-            <GenericTable
-              data={staff}
-              columns={columns}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              searchKeys={["name", "role", "department", "status"]}
-            />
+            {isLoading ? (
+              <div className="flex items-center justify-center py-20 gap-3 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="text-sm font-medium">Loading staff...</span>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <p className="text-sm font-bold text-rose-500">{error}</p>
+                <Button variant="outline" onClick={fetchStaff} className="rounded-xl">Retry</Button>
+              </div>
+            ) : (
+              <GenericTable
+                data={staff}
+                columns={columns}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                searchKeys={["name", "role", "department", "status"]}
+              />
+            )}
           </CardContent>
         </Card>
       </main>
 
       <StaffDetails
         isOpen={isOpen}
-        onOpenChange={setIsOpen}
+        onOpenChange={handleOpenChange}
         staff={selected}
-        onSave={handleSave}
       />
     </div>
   );

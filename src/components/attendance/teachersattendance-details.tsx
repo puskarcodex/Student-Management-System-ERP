@@ -19,20 +19,14 @@ import {
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
-import { useEffect } from "react";
-import type { Attendance } from "@/lib/types";
+import { useEffect, useState } from "react";
+import type { Attendance, Teacher } from "@/lib/types";
 import { NepaliDatePickerField } from "@/components/common/NepaliDatePicekrField";
+import { attendanceApi, teachersApi } from "@/lib/api";
+import { Loader2 } from "lucide-react";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyControl = any;
-
-const ALL_TEACHERS = [
-  { id: 1, name: "Mr. Rajesh Kumar"   },
-  { id: 2, name: "Mrs. Anjali Sharma" },
-  { id: 3, name: "Mr. Suresh Gautam"  },
-  { id: 4, name: "Ms. Priya Shrestha" },
-  { id: 5, name: "Mr. Bikash Karki"   },
-];
 
 interface ManageTeacherAttendanceProps {
   isOpen: boolean;
@@ -53,6 +47,16 @@ export default function ManageTeacherAttendanceDetails({
   onOpenChange,
   attendance,
 }: ManageTeacherAttendanceProps) {
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  useEffect(() => {
+    teachersApi.getAll({ page: 1, limit: 500 }).then((res) => {
+      setTeachers(res.data ?? []);
+    }).catch(() => {});
+  }, []);
+
   const {
     handleSubmit,
     formState: { errors },
@@ -65,25 +69,38 @@ export default function ManageTeacherAttendanceDetails({
 
   useEffect(() => {
     if (!isOpen) return;
+    setSubmitError(null);
     if (attendance) {
-      reset({
-        teacherName: attendance.name,
-        date: attendance.date,
-        status: attendance.status,
-      });
+      reset({ teacherName: attendance.name, date: attendance.date, status: attendance.status });
     } else {
       reset({ status: "Present", teacherName: "", date: "" });
     }
   }, [isOpen, attendance, reset]);
 
-  const onSubmit = (data: FormData) => {
-    if (attendance) {
-      console.log("Update Attendance:", { ...attendance, ...data });
-    } else {
-      console.log("Create Attendance:", data);
+  const onSubmit = async (data: FormData) => {
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      const teacher = teachers.find((t) => t.name === data.teacherName);
+      const payload = {
+        entityType: "Teacher" as const,
+        entityId: teacher?.id ?? 0,
+        name: data.teacherName,
+        date: data.date,
+        status: data.status as "Present" | "Absent" | "Leave",
+      };
+      if (attendance) {
+        await attendanceApi.update(attendance.id, payload);
+      } else {
+        await attendanceApi.create(payload);
+      }
+      reset();
+      onOpenChange(false);
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setIsSubmitting(false);
     }
-    reset();
-    onOpenChange(false);
   };
 
   return (
@@ -113,7 +130,7 @@ export default function ManageTeacherAttendanceDetails({
                       <SelectValue placeholder="Select teacher" />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
-                      {ALL_TEACHERS.map((t) => (
+                      {teachers.map((t) => (
                         <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -148,21 +165,32 @@ export default function ManageTeacherAttendanceDetails({
               />
             </FormField>
 
+            {submitError && (
+              <p className="text-[11px] font-bold text-rose-500 text-center">{submitError}</p>
+            )}
           </form>
         </div>
 
         <SheetFooter className="p-8 bg-card border-t flex flex-row items-center justify-end gap-3">
           <SheetClose asChild>
-            <Button type="button" variant="ghost" className="rounded-xl font-bold text-muted-foreground">
+            <Button type="button" variant="ghost" className="rounded-xl font-bold text-muted-foreground" disabled={isSubmitting}>
               Cancel
             </Button>
           </SheetClose>
           <Button
             type="submit"
             form="teacher-attendance-form"
+            disabled={isSubmitting}
             className="rounded-xl bg-primary px-8 font-black shadow-lg shadow-primary/20 hover:shadow-xl transition-all"
           >
-            {attendance ? "Update Attendance" : "Save Attendance"}
+            {isSubmitting ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {attendance ? "Updating..." : "Saving..."}
+              </span>
+            ) : (
+              attendance ? "Update Attendance" : "Save Attendance"
+            )}
           </Button>
         </SheetFooter>
       </SheetContent>

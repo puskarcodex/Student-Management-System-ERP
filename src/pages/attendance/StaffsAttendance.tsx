@@ -1,77 +1,85 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { GenericTable } from "@/components/GenericTable/generic-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar, UserCheck, UserX, Clock, Plus } from "lucide-react";
+import { Calendar, UserCheck, UserX, Clock, Plus, Loader2 } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
-import type { Attendance } from "@/lib/types";
+import type { Attendance, Staff } from "@/lib/types";
 import ManageStaffAttendanceDetails from "@/components/attendance/staffsattendace-details";
-
-const ALL_STAFF = [
-  { id: 1, name: "Bimal Shrestha", role: "Accountant"     },
-  { id: 2, name: "Kamala Rai",     role: "Librarian"      },
-  { id: 3, name: "Dinesh Karki",   role: "Security Guard" },
-  { id: 4, name: "Sunita Tamang",  role: "Receptionist"   },
-];
-
-const MOCK_ATTENDANCE: Attendance[] = [
-  { id: 1, name: "Bimal Shrestha", entityType: "Staff", entityId: 1, date: "2024-03-01", status: "Present" },
-  { id: 2, name: "Kamala Rai",     entityType: "Staff", entityId: 2, date: "2024-03-01", status: "Present" },
-  { id: 3, name: "Dinesh Karki",   entityType: "Staff", entityId: 3, date: "2024-03-01", status: "Leave"   },
-  { id: 4, name: "Sunita Tamang",  entityType: "Staff", entityId: 4, date: "2024-03-02", status: "Absent"  },
-];
-
-const columns: ColumnDef<Attendance>[] = [
-  {
-    accessorKey: "name",
-    header: "Staff Member",
-    cell: (info) => {
-      const name = String(info.getValue());
-      const staff = ALL_STAFF.find((s) => s.name === name);
-      return (
-        <div className="flex flex-col">
-          <span className="font-bold text-foreground">{name}</span>
-          {staff && <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-tight">{staff.role}</span>}
-        </div>
-      );
-    },
-  },
-  {
-    accessorKey: "date",
-    header: "Date",
-    cell: (info) => (
-      <div className="flex items-center gap-2 text-muted-foreground/70">
-        <Calendar className="w-3 h-3" />
-        <span className="text-xs font-bold">{String(info.getValue())}</span>
-      </div>
-    ),
-  },
-  {
-    accessorKey: "status",
-    header: "Status",
-    cell: (info) => {
-      const status = String(info.getValue());
-      const styles: Record<string, string> = {
-        Present: "bg-emerald-500/10 text-emerald-600",
-        Absent:  "bg-rose-500/10 text-rose-600",
-        Leave:   "bg-[oklch(0.7686_0.1647_70.0804)]/10 text-[oklch(0.7686_0.1647_70.0804)]",
-      };
-      return (
-        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${styles[status]}`}>
-          {status}
-        </span>
-      );
-    },
-  },
-];
+import { attendanceApi, staffApi } from "@/lib/api";
 
 export default function StaffAttendance() {
-  const [records, setRecords] = useState<Attendance[]>(MOCK_ATTENDANCE);
+  const [records, setRecords] = useState<Attendance[]>([]);
+  const [staffList, setStaffList] = useState<Staff[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [selectedAttendance, setSelectedAttendance] = useState<Attendance | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchRecords = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const res = await attendanceApi.getByEntityType("Staff", { page: 1, limit: 200 });
+      setRecords(res.data ?? []);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load attendance");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRecords();
+    staffApi.getAll({ page: 1, limit: 500 }).then((res) => setStaffList(res.data ?? [])).catch(() => {});
+  }, [fetchRecords]);
+
+  const columns: ColumnDef<Attendance>[] = [
+    {
+      accessorKey: "name",
+      header: "Staff Member",
+      cell: (info) => {
+        const name = String(info.getValue());
+        const staff = staffList.find((s) => s.name === name);
+        return (
+          <div className="flex flex-col">
+            <span className="font-bold text-foreground">{name}</span>
+            {staff && <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-tight">{staff.role}</span>}
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "date",
+      header: "Date",
+      cell: (info) => (
+        <div className="flex items-center gap-2 text-muted-foreground/70">
+          <Calendar className="w-3 h-3" />
+          <span className="text-xs font-bold">{String(info.getValue())}</span>
+        </div>
+      ),
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: (info) => {
+        const status = String(info.getValue());
+        const styles: Record<string, string> = {
+          Present: "bg-emerald-500/10 text-emerald-600",
+          Absent:  "bg-rose-500/10 text-rose-600",
+          Leave:   "bg-[oklch(0.7686_0.1647_70.0804)]/10 text-[oklch(0.7686_0.1647_70.0804)]",
+        };
+        return (
+          <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${styles[status] ?? ""}`}>
+            {status}
+          </span>
+        );
+      },
+    },
+  ];
 
   const presentCount = records.filter((r) => r.status === "Present").length;
   const absentCount  = records.filter((r) => r.status === "Absent").length;
@@ -80,6 +88,20 @@ export default function StaffAttendance() {
   const handleEdit = (attendance: Attendance) => {
     setSelectedAttendance(attendance);
     setIsOpen(true);
+  };
+
+  const handleDelete = async (row: Attendance) => {
+    try {
+      await attendanceApi.delete(row.id);
+      setRecords((prev) => prev.filter((r) => r.id !== row.id));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete");
+    }
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (!open) fetchRecords();
   };
 
   return (
@@ -100,9 +122,9 @@ export default function StaffAttendance() {
         </div>
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard title="Present" value={String(presentCount)} icon={UserCheck} variant="green"  />
-          <StatCard title="Absent"  value={String(absentCount)}  icon={UserX}     variant="amber"  />
-          <StatCard title="Leave"   value={String(leaveCount)}   icon={Clock}     variant="purple" />
+          <StatCard title="Present" value={isLoading ? "..." : String(presentCount)} icon={UserCheck} variant="green"  />
+          <StatCard title="Absent"  value={isLoading ? "..." : String(absentCount)}  icon={UserX}     variant="amber"  />
+          <StatCard title="Leave"   value={isLoading ? "..." : String(leaveCount)}   icon={Clock}     variant="purple" />
         </div>
 
         <Card className="rounded-[2.5rem] border-none shadow-sm overflow-hidden bg-card">
@@ -111,21 +133,34 @@ export default function StaffAttendance() {
             <div className="text-xs font-bold text-muted-foreground/50 uppercase tracking-widest">{records.length} Records</div>
           </CardHeader>
           <CardContent className="px-8 pb-8">
-            <GenericTable
-              data={records}
-              columns={columns}
-              onEdit={handleEdit}
-              onDelete={(row) => setRecords(records.filter((r) => r.id !== row.id))}
-              searchKeys={["name", "status"]}
-            />
+            {isLoading ? (
+              <div className="flex items-center justify-center py-20 gap-3 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="text-sm font-medium">Loading attendance...</span>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <p className="text-sm font-bold text-rose-500">{error}</p>
+                <Button variant="outline" onClick={fetchRecords} className="rounded-xl">Retry</Button>
+              </div>
+            ) : (
+              <GenericTable
+                data={records}
+                columns={columns}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                searchKeys={["name", "status"]}
+              />
+            )}
           </CardContent>
         </Card>
       </main>
 
       <ManageStaffAttendanceDetails
         isOpen={isOpen}
-        onOpenChange={setIsOpen}
+        onOpenChange={handleOpenChange}
         attendance={selectedAttendance}
+        staffList={staffList}
       />
     </div>
   );

@@ -25,7 +25,7 @@ export interface Result {
   className: string;        // FIX #9: renamed from 'class' (reserved keyword) — update Result pages
   totalMarks: number;
   percentage: number;
-  result: "Pass" | "Fail";
+  resultStatus: "Pass" | "Fail";
   createdAt?: string;
   updatedAt?: string;
 }

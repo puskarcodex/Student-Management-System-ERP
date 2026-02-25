@@ -1,100 +1,121 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { GenericTable } from "@/components/GenericTable/generic-table";
 import RecordDetails from "@/components/fees/records-details";
 import ManageFeeDetails from "@/components/fees/collect-details";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import {
-  History,
-  TrendingUp,
-  Calendar,
-  AlertTriangle,
-  Receipt,
-} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { History, TrendingUp, Calendar, AlertTriangle, Receipt, Loader2 } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { FeeBill, FeeStructure } from "@/lib/types";
-
-const MOCK_RECORDS: FeeBill[] = [
-  {
-    id: 1, studentId: 101, studentName: "Rahul Sharma",
-    classId: "Class 5", className: "Class 5",
-    billDate: "2024-03-01", dueDate: "2024-03-15",
-    feeItems: [] as FeeBill["feeItems"],
-    totalAmount: 3350, paidAmount: 3350, balanceAmount: 0, status: "Paid",
-  },
-  {
-    id: 2, studentId: 102, studentName: "Ananya Verma",
-    classId: "Class 9", className: "Class 9",
-    billDate: "2024-03-01", dueDate: "2024-03-15",
-    feeItems: [] as FeeBill["feeItems"],
-    totalAmount: 6500, paidAmount: 2000, balanceAmount: 4500, status: "Partial",
-  },
-  {
-    id: 3, studentId: 103, studentName: "Rohan Karki",
-    classId: "Class 9", className: "Class 9",
-    billDate: "2024-02-15", dueDate: "2024-02-28",
-    feeItems: [] as FeeBill["feeItems"],
-    totalAmount: 6500, paidAmount: 0, balanceAmount: 6500, status: "Overdue",
-  },
-];
-
-const mockStructures: FeeStructure[] = [
-  {
-    id: 1, classId: "Class 5", className: "Class 5",
-    recurringItems: [
-      { id: 1, feeHead: "Tuition Fee", amount: 2500, feeType: "Recurring", frequency: "Monthly" },
-      { id: 2, feeHead: "Exam Fee", amount: 500, feeType: "Recurring", frequency: "Quarterly" },
-    ],
-    oneTimeItems: [
-      { id: 3, feeHead: "Tie Fee", amount: 200, feeType: "One-Time" },
-      { id: 4, feeHead: "Belt Fee", amount: 150, feeType: "One-Time" },
-    ],
-    totalAmount: 3350, status: "Active",
-  },
-  {
-    id: 2, classId: "Class 9", className: "Class 9",
-    recurringItems: [
-      { id: 5, feeHead: "Tuition Fee", amount: 4500, feeType: "Recurring", frequency: "Monthly" },
-      { id: 6, feeHead: "Exam Fee", amount: 1000, feeType: "Recurring", frequency: "Quarterly" },
-    ],
-    oneTimeItems: [
-      { id: 7, feeHead: "Admission Fee", amount: 1000, feeType: "One-Time" },
-    ],
-    totalAmount: 6500, status: "Active",
-  },
-];
+import { feeBillsApi, feeStructureApi } from "@/lib/api";
 
 export default function FeeRecords() {
-  const [records, setRecords] = useState<FeeBill[]>(MOCK_RECORDS);
+  const [records, setRecords]         = useState<FeeBill[]>([]);
+  const [structures, setStructures]   = useState<FeeStructure[]>([]);
   const [selectedBill, setSelectedBill] = useState<FeeBill | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen]   = useState(false);
+  const [isLoading, setIsLoading]     = useState(true);
+  const [error, setError]             = useState<string | null>(null);
 
-  const totalRevenue = records.reduce((sum, r) => sum + r.totalAmount, 0);
-  const totalOutstanding = records.reduce((sum, r) => sum + r.balanceAmount, 0);
-  const collectionRate = totalRevenue > 0
+
+  const mapStructures = (raw: FeeStructure[]) =>
+    raw.map((s) => {
+      const raw_s = s as unknown as Record<string, unknown>;
+      const flatItems = (raw_s.feeItems ?? raw_s.FeeItems ?? []) as { feeHead?: string; FeeHead?: string; amount?: number; Amount?: number; feeType?: string; FeeType?: string; frequency?: string; Frequency?: string; id?: number; Id?: number }[];
+      const hasFlat = flatItems.length > 0;
+      return {
+        ...s,
+        recurringItems: hasFlat
+          ? flatItems.filter((i) => (i.feeType ?? i.FeeType) === "Recurring").map((i) => ({
+              id: i.id ?? i.Id ?? 0,
+              feeHead: i.feeHead ?? i.FeeHead ?? "",
+              amount: i.amount ?? i.Amount ?? 0,
+              feeType: "Recurring" as const,
+              frequency: ((i.frequency ?? i.Frequency) ?? "Monthly") as "Monthly" | "Quarterly" | "Yearly",
+            }))
+          : (s.recurringItems ?? []),
+        oneTimeItems: hasFlat
+          ? flatItems.filter((i) => (i.feeType ?? i.FeeType) === "One-Time").map((i) => ({
+              id: i.id ?? i.Id ?? 0,
+              feeHead: i.feeHead ?? i.FeeHead ?? "",
+              amount: i.amount ?? i.Amount ?? 0,
+              feeType: "One-Time" as const,
+            }))
+          : (s.oneTimeItems ?? []),
+      };
+    });
+  const fetchData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const [billsRes, structuresRes] = await Promise.all([
+        feeBillsApi.getAll({ page: 1, limit: 200 }),
+        feeStructureApi.getAll({ page: 1, limit: 100 }),
+      ]);
+      // Map Fee entity shape -> FeeBill shape
+      const bills = (billsRes.data ?? []).map((b) => {
+        const raw = b as unknown as Record<string, unknown>;
+        return {
+          ...b,
+          // backend returns `amount` — map to totalAmount/balanceAmount
+          totalAmount:   Number(raw.totalAmount   ?? raw.amount ?? 0),
+          paidAmount:    Number(raw.paidAmount     ?? 0),
+          balanceAmount: Number(raw.balanceAmount  ?? raw.amount ?? 0),
+          className:     String(raw.className      ?? raw.classId ?? ""),
+          billDate:      String(raw.billDate       ?? raw.createdAt ?? ""),
+          feeItems:      (raw.feeItems as unknown[] ?? []),
+        } as FeeBill;
+      });
+      setRecords(bills);
+      setStructures(mapStructures(structuresRes.data ?? []));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load records");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const totalRevenue      = records.reduce((sum, r) => sum + r.totalAmount, 0);
+  const totalOutstanding  = records.reduce((sum, r) => sum + r.balanceAmount, 0);
+  const collectionRate    = totalRevenue > 0
     ? Math.round(((totalRevenue - totalOutstanding) / totalRevenue) * 100)
     : 0;
 
-  const handleView = (bill: FeeBill) => {
-    setSelectedBill(bill);
-    setIsDetailOpen(true);
+  const handleView = (bill: FeeBill) => { setSelectedBill(bill); setIsDetailOpen(true); };
+  const handleEdit = (bill: FeeBill) => { setSelectedBill(bill); setIsEditOpen(true); };
+
+  const handleDelete = async (row: FeeBill) => {
+    try {
+      await feeBillsApi.delete(row.id);
+      setRecords((prev) => prev.filter((r) => r.id !== row.id));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete");
+    }
   };
 
-  const handleEdit = (bill: FeeBill) => {
-    setSelectedBill(bill);
-    setIsEditOpen(true);
+  const handlePaymentRecorded = async (billId: number, newPaidAmount: number) => {
+    try {
+      await feeBillsApi.recordPayment(billId, { paymentAmount: newPaidAmount });
+      setRecords((prev) => prev.map((r) => {
+        if (r.id !== billId) return r;
+        const newBalance = Math.max(0, r.totalAmount - newPaidAmount);
+        const newStatus: FeeBill["status"] = newBalance <= 0 ? "Paid" : "Partial";
+        return { ...r, paidAmount: newPaidAmount, balanceAmount: newBalance, status: newStatus };
+      }));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to record payment");
+    }
   };
 
-  const handlePaymentRecorded = (billId: number, newPaidAmount: number) => {
-    setRecords(records.map((r) => {
-      if (r.id !== billId) return r;
-      const newBalance = Math.max(0, r.totalAmount - newPaidAmount);
-      const newStatus: FeeBill["status"] = newBalance <= 0 ? "Paid" : "Partial";
-      return { ...r, paidAmount: newPaidAmount, balanceAmount: newBalance, status: newStatus };
-    }));
+  const handleEditClose = (open: boolean) => {
+    setIsEditOpen(open);
+    if (!open) fetchData();
   };
 
   const columns: ColumnDef<FeeBill>[] = [
@@ -104,9 +125,7 @@ export default function FeeRecords() {
       cell: (info) => (
         <div className="flex flex-col">
           <span className="font-bold text-foreground">{String(info.getValue())}</span>
-          <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-tight">
-            ID: {info.row.original.studentId}
-          </span>
+          <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-tight">ID: {info.row.original.studentId}</span>
         </div>
       ),
     },
@@ -114,20 +133,14 @@ export default function FeeRecords() {
     {
       accessorKey: "totalAmount",
       header: "Billed",
-      cell: (info) => (
-        <span className="font-medium text-muted-foreground">Rs. {String(info.getValue())}</span>
-      ),
+      cell: (info) => <span className="font-medium text-muted-foreground">Rs. {String(info.getValue())}</span>,
     },
     {
       accessorKey: "balanceAmount",
       header: "Balance",
       cell: (info) => {
         const amount = Number(info.getValue());
-        return (
-          <span className={`font-black ${amount > 0 ? "text-rose-600" : "text-emerald-600"}`}>
-            Rs. {amount}
-          </span>
-        );
+        return <span className={`font-black ${amount > 0 ? "text-rose-600" : "text-emerald-600"}`}>Rs. {amount}</span>;
       },
     },
     {
@@ -152,7 +165,7 @@ export default function FeeRecords() {
           Overdue: "bg-rose-500/10 text-rose-600",
         };
         return (
-          <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${styles[status]}`}>
+          <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${styles[status] ?? ""}`}>
             {status}
           </span>
         );
@@ -176,9 +189,9 @@ export default function FeeRecords() {
         </div>
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard title="Overall Collection" value={`${collectionRate}%`}         icon={TrendingUp}   variant="green" />
-          <StatCard title="Total Due"           value={`Rs. ${totalOutstanding}`}    icon={AlertTriangle} variant="amber" />
-          <StatCard title="Active Invoices"     value={String(records.length)}       icon={Receipt}       variant="blue"  />
+          <StatCard title="Overall Collection" value={isLoading ? "..." : `${collectionRate}%`}          icon={TrendingUp}    variant="green" />
+          <StatCard title="Total Due"           value={isLoading ? "..." : `Rs. ${totalOutstanding}`}    icon={AlertTriangle}  variant="amber" />
+          <StatCard title="Active Invoices"     value={isLoading ? "..." : String(records.length)}       icon={Receipt}        variant="blue"  />
         </div>
 
         <Card className="rounded-[2.5rem] border-none shadow-sm overflow-hidden bg-card">
@@ -187,19 +200,29 @@ export default function FeeRecords() {
               <CardTitle className="text-xl font-bold tracking-tight">Payment Ledger</CardTitle>
               <p className="text-xs font-bold text-muted-foreground/50 mt-1 uppercase tracking-widest">All Transactions</p>
             </div>
-            <div className="text-xs font-bold text-muted-foreground/50 uppercase tracking-widest">
-              Showing {records.length} Records
-            </div>
+            <div className="text-xs font-bold text-muted-foreground/50 uppercase tracking-widest">Showing {records.length} Records</div>
           </CardHeader>
           <CardContent className="px-8 pb-8">
-            <GenericTable
-              data={records}
-              columns={columns}
-              onView={handleView}
-              onEdit={handleEdit}
-              onDelete={(row) => setRecords(records.filter((r) => r.id !== row.id))}
-              searchKeys={["studentName", "className", "status"]}
-            />
+            {isLoading ? (
+              <div className="flex items-center justify-center py-20 gap-3 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="text-sm font-medium">Loading records...</span>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <p className="text-sm font-bold text-rose-500">{error}</p>
+                <Button variant="outline" onClick={fetchData} className="rounded-xl">Retry</Button>
+              </div>
+            ) : (
+              <GenericTable
+                data={records}
+                columns={columns}
+                onView={handleView}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                searchKeys={["studentName", "className", "status"]}
+              />
+            )}
           </CardContent>
         </Card>
       </main>
@@ -213,9 +236,9 @@ export default function FeeRecords() {
 
       <ManageFeeDetails
         isOpen={isEditOpen}
-        onOpenChange={setIsEditOpen}
+        onOpenChange={handleEditClose}
         bill={selectedBill}
-        structures={mockStructures}
+        structures={structures}
       />
     </div>
   );
@@ -228,7 +251,6 @@ function StatCard({ title, value, icon: Icon, variant }: { title: string; value:
     amber:  { bg: "bg-[oklch(0.7686_0.1647_70.0804)]/10 dark:bg-[oklch(0.7686_0.1647_70.0804)]/15",   iconBg: "bg-[oklch(0.7686_0.1647_70.0804)]/20",   iconColor: "text-[oklch(0.7686_0.1647_70.0804)]"   },
     purple: { bg: "bg-[oklch(0.6056_0.2189_292.7172)]/10 dark:bg-[oklch(0.6056_0.2189_292.7172)]/15", iconBg: "bg-[oklch(0.6056_0.2189_292.7172)]/20", iconColor: "text-[oklch(0.6056_0.2189_292.7172)]" },
   }[variant];
-
   return (
     <Card className={`rounded-[2.2rem] border-none shadow-sm p-7 transition-all hover:shadow-md group ${styles.bg}`}>
       <div className="flex items-center justify-between">

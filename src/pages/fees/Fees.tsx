@@ -1,62 +1,70 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { BookOpen, Plus, Trash2, Save, Wallet, RefreshCw, Star } from "lucide-react";
+import { BookOpen, Plus, Trash2, Save, Wallet, RefreshCw, Star, Loader2 } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 import { CLASS_OPTIONS, FEE_HEAD_OPTIONS } from "@/lib/dropdown-options";
 import type { FeeStructure, FeeItem } from "@/lib/types";
+import { feeStructureApi } from "@/lib/api";
 
 type EditableFeeItem = { feeHead: string; amount: string; frequency?: string };
 
 const FREQUENCY_OPTIONS = [
-  { value: "Monthly", label: "Monthly" },
-  { value: "Quarterly", label: "Quarterly" },
-  { value: "Yearly", label: "Yearly" },
+  { value: "Monthly",     label: "Monthly"     },
+  { value: "Quarterly",   label: "Quarterly"   },
+  { value: "Yearly",      label: "Yearly"      },
 ];
 
-// One-time fee heads (preset suggestions)
 const ONE_TIME_FEE_HEADS = ["Admission Fee", "ID Card Fee", "Tie Fee", "Belt Fee", "Uniform Fee"];
 
-const mockStructures: FeeStructure[] = [
-  {
-    id: 1,
-    classId: "Class 5", className: "Class 5",
-    recurringItems: [
-      { id: 1, feeHead: "Tuition Fee", amount: 2500, feeType: "Recurring", frequency: "Monthly" },
-      { id: 2, feeHead: "Exam Fee", amount: 500, feeType: "Recurring", frequency: "Quarterly" },
-    ],
-    oneTimeItems: [
-      { id: 3, feeHead: "Admission Fee", amount: 1000, feeType: "One-Time" },
-      { id: 4, feeHead: "Tie Fee", amount: 200, feeType: "One-Time" },
-      { id: 5, feeHead: "Belt Fee", amount: 150, feeType: "One-Time" },
-    ],
-    totalAmount: 4350, status: "Active",
-  },
-];
-
 export default function FeeSetup() {
-  const [structures, setStructures] = useState<FeeStructure[]>(mockStructures);
+  const [structures, setStructures]       = useState<FeeStructure[]>([]);
   const [selectedClass, setSelectedClass] = useState<string>("");
   const [recurringItems, setRecurringItems] = useState<EditableFeeItem[]>([]);
-  const [oneTimeItems, setOneTimeItems] = useState<EditableFeeItem[]>([]);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [oneTimeItems, setOneTimeItems]     = useState<EditableFeeItem[]>([]);
+  const [editingId, setEditingId]           = useState<number | null>(null);
+  const [isLoading, setIsLoading]           = useState(true);
+  const [isSaving, setIsSaving]             = useState(false);
+
+  const fetchStructures = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const res = await feeStructureApi.getAll({ page: 1, limit: 100 });
+      // Backend returns FeeItems as a flat array — split into recurring/oneTime
+      const mapped: FeeStructure[] = (res.data ?? []).map((s) => {
+        const items = (s as unknown as { feeItems?: { feeHead: string; amount: number; feeType: string; frequency?: string; id: number }[] }).feeItems ?? [];
+        return {
+          ...s,
+          recurringItems: items
+            .filter((i) => i.feeType === "Recurring")
+            .map((i) => ({ id: i.id, feeHead: i.feeHead, amount: i.amount, feeType: "Recurring" as const, frequency: (i.frequency ?? "Monthly") as "Monthly" | "Quarterly" | "Yearly" })),
+          oneTimeItems: items
+            .filter((i) => i.feeType === "One-Time")
+            .map((i) => ({ id: i.id, feeHead: i.feeHead, amount: i.amount, feeType: "One-Time" as const })),
+        };
+      });
+      setStructures(mapped);
+    } catch (err: unknown) {
+      console.error("FeeSetup fetch error:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchStructures(); }, [fetchStructures]);
 
   const handleClassSelect = (classId: string) => {
     setSelectedClass(classId);
     const existing = structures.find((s) => s.classId === classId);
     if (existing) {
-      setRecurringItems(existing.recurringItems.map((i) => ({ feeHead: i.feeHead, amount: String(i.amount), frequency: i.frequency })));
-      setOneTimeItems(existing.oneTimeItems.map((i) => ({ feeHead: i.feeHead, amount: String(i.amount) })));
+      setRecurringItems((existing.recurringItems ?? []).map((i) => ({ feeHead: i.feeHead, amount: String(i.amount), frequency: i.frequency })));
+      setOneTimeItems((existing.oneTimeItems ?? []).map((i) => ({ feeHead: i.feeHead, amount: String(i.amount) })));
       setEditingId(existing.id);
     } else {
       setRecurringItems([]);
@@ -66,10 +74,10 @@ export default function FeeSetup() {
   };
 
   const addRecurring = () => setRecurringItems([...recurringItems, { feeHead: "", amount: "", frequency: "Monthly" }]);
-  const addOneTime = () => setOneTimeItems([...oneTimeItems, { feeHead: "", amount: "" }]);
+  const addOneTime   = () => setOneTimeItems([...oneTimeItems, { feeHead: "", amount: "" }]);
 
   const removeRecurring = (i: number) => setRecurringItems(recurringItems.filter((_, idx) => idx !== i));
-  const removeOneTime = (i: number) => setOneTimeItems(oneTimeItems.filter((_, idx) => idx !== i));
+  const removeOneTime   = (i: number) => setOneTimeItems(oneTimeItems.filter((_, idx) => idx !== i));
 
   const updateRecurring = (index: number, field: keyof EditableFeeItem, value: string) => {
     const updated = [...recurringItems];
@@ -87,39 +95,42 @@ export default function FeeSetup() {
     recurringItems.reduce((s, i) => s + (Number(i.amount) || 0), 0) +
     oneTimeItems.reduce((s, i) => s + (Number(i.amount) || 0), 0);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedClass) return;
-    const className = CLASS_OPTIONS.find((c) => c.value === selectedClass)?.label ?? selectedClass;
+    setIsSaving(true);
+    try {
+      const className = CLASS_OPTIONS.find((c) => c.value === selectedClass)?.label ?? selectedClass;
 
-    const recurring: FeeItem[] = recurringItems
-      .filter((i) => i.feeHead && i.amount)
-      .map((i, idx) => ({ id: idx + 1, feeHead: i.feeHead, amount: Number(i.amount), feeType: "Recurring", frequency: i.frequency as FeeItem["frequency"] }));
+      const recurring: FeeItem[] = recurringItems
+        .filter((i) => i.feeHead && i.amount)
+        .map((i, idx) => ({ id: idx + 1, feeHead: i.feeHead, amount: Number(i.amount), feeType: "Recurring", frequency: i.frequency as FeeItem["frequency"] }));
 
-    const oneTime: FeeItem[] = oneTimeItems
-      .filter((i) => i.feeHead && i.amount)
-      .map((i, idx) => ({ id: idx + 100, feeHead: i.feeHead, amount: Number(i.amount), feeType: "One-Time" }));
+      const oneTime: FeeItem[] = oneTimeItems
+        .filter((i) => i.feeHead && i.amount)
+        .map((i, idx) => ({ id: idx + 100, feeHead: i.feeHead, amount: Number(i.amount), feeType: "One-Time" }));
 
-    if (editingId) {
-      setStructures(structures.map((s) =>
-        s.id === editingId ? { ...s, recurringItems: recurring, oneTimeItems: oneTime, totalAmount, className } : s
-      ));
-    } else {
-      setStructures([...structures, {
-        id: Date.now(), classId: selectedClass, className,
-        recurringItems: recurring, oneTimeItems: oneTime, totalAmount, status: "Active",
-      }]);
+      if (editingId) {
+        await feeStructureApi.updateItems(editingId, { classId: selectedClass, className, totalAmount, status: "Active", recurringItems: recurring, oneTimeItems: oneTime });
+      } else {
+        await feeStructureApi.create({ classId: selectedClass, className, recurringItems: recurring, oneTimeItems: oneTime, totalAmount, status: "Active" });
+      }
+      await fetchStructures();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setIsSaving(false);
     }
-
-    console.log("Saved structure for", className);
   };
 
-  const handleDelete = (id: number) => {
-    setStructures(structures.filter((s) => s.id !== id));
-    if (editingId === id) {
-      setSelectedClass("");
-      setRecurringItems([]);
-      setOneTimeItems([]);
-      setEditingId(null);
+  const handleDelete = async (id: number) => {
+    try {
+      await feeStructureApi.delete(id);
+      setStructures((prev) => prev.filter((s) => s.id !== id));
+      if (editingId === id) {
+        setSelectedClass(""); setRecurringItems([]); setOneTimeItems([]); setEditingId(null);
+      }
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete");
     }
   };
 
@@ -127,7 +138,6 @@ export default function FeeSetup() {
     <div className="p-4 md:px-8 md:pt-2 md:pb-8 bg-muted/30 min-h-screen">
       <main className="space-y-8">
 
-        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 ml-1 mt-2">
           <div>
             <h1 className="text-4xl font-extrabold tracking-tight text-foreground">Fee Setup</h1>
@@ -135,11 +145,10 @@ export default function FeeSetup() {
           </div>
         </div>
 
-        {/* Stats */}
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard title="Configured Classes" value={String(structures.length)} icon={BookOpen} variant="green" />
-          <StatCard title="Avg. Total Fee" value={`Rs. ${Math.round(structures.reduce((s, x) => s + x.totalAmount, 0) / (structures.length || 1))}`} icon={Wallet} variant="blue" />
-          <StatCard title="Active Structures" value={String(structures.filter((s) => s.status === "Active").length)} icon={Save} variant="amber" />
+          <StatCard title="Configured Classes" value={isLoading ? "..." : String(structures.length)} icon={BookOpen} variant="green" />
+          <StatCard title="Avg. Total Fee" value={isLoading ? "..." : `Rs. ${Math.round(structures.reduce((s, x) => s + x.totalAmount, 0) / (structures.length || 1))}`} icon={Wallet} variant="blue" />
+          <StatCard title="Active Structures" value={isLoading ? "..." : String(structures.filter((s) => s.status === "Active").length)} icon={Save} variant="amber" />
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
@@ -152,7 +161,6 @@ export default function FeeSetup() {
             </CardHeader>
             <CardContent className="px-8 pb-8 space-y-6">
 
-              {/* Class Selector */}
               <div className="space-y-2">
                 <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground/50">Select Class</p>
                 <Select value={selectedClass} onValueChange={handleClassSelect}>
@@ -172,7 +180,7 @@ export default function FeeSetup() {
 
               {selectedClass && (
                 <>
-                  {/* Recurring Fees Section */}
+                  {/* Recurring Fees */}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -183,19 +191,13 @@ export default function FeeSetup() {
                         <Plus className="w-3.5 h-3.5" /> Add
                       </Button>
                     </div>
-
                     {recurringItems.length === 0 && (
-                      <div className="text-center py-5 text-muted-foreground/30 text-xs font-bold border-2 border-dashed border-muted rounded-2xl">
-                        No recurring fees yet
-                      </div>
+                      <div className="text-center py-5 text-muted-foreground/30 text-xs font-bold border-2 border-dashed border-muted rounded-2xl">No recurring fees yet</div>
                     )}
-
                     {recurringItems.map((item, index) => (
                       <div key={index} className="flex items-center gap-2">
                         <Select value={item.feeHead} onValueChange={(v) => updateRecurring(index, "feeHead", v)}>
-                          <SelectTrigger className="rounded-xl flex-1 text-sm">
-                            <SelectValue placeholder="Fee Head" />
-                          </SelectTrigger>
+                          <SelectTrigger className="rounded-xl flex-1 text-sm"><SelectValue placeholder="Fee Head" /></SelectTrigger>
                           <SelectContent className="rounded-xl">
                             {FEE_HEAD_OPTIONS.filter(o => !ONE_TIME_FEE_HEADS.includes(o.label)).map((opt) => (
                               <SelectItem key={opt.value} value={opt.label}>{opt.label}</SelectItem>
@@ -203,22 +205,14 @@ export default function FeeSetup() {
                           </SelectContent>
                         </Select>
                         <Select value={item.frequency ?? "Monthly"} onValueChange={(v) => updateRecurring(index, "frequency", v)}>
-                          <SelectTrigger className="rounded-xl w-32 text-sm">
-                            <SelectValue />
-                          </SelectTrigger>
+                          <SelectTrigger className="rounded-xl w-32 text-sm"><SelectValue /></SelectTrigger>
                           <SelectContent className="rounded-xl">
                             {FREQUENCY_OPTIONS.map((opt) => (
                               <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
-                        <Input
-                          type="number"
-                          placeholder="Rs."
-                          value={item.amount}
-                          onChange={(e) => updateRecurring(index, "amount", e.target.value)}
-                          className="rounded-xl w-24"
-                        />
+                        <Input type="number" placeholder="Rs." value={item.amount} onChange={(e) => updateRecurring(index, "amount", e.target.value)} className="rounded-xl w-24" />
                         <button type="button" onClick={() => removeRecurring(index)} className="p-2 rounded-xl text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors">
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -226,7 +220,7 @@ export default function FeeSetup() {
                     ))}
                   </div>
 
-                  {/* One-Time Fees Section */}
+                  {/* One-Time Fees */}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -238,32 +232,20 @@ export default function FeeSetup() {
                         <Plus className="w-3.5 h-3.5" /> Add
                       </Button>
                     </div>
-
                     {oneTimeItems.length === 0 && (
-                      <div className="text-center py-5 text-muted-foreground/30 text-xs font-bold border-2 border-dashed border-muted rounded-2xl">
-                        No one-time fees yet
-                      </div>
+                      <div className="text-center py-5 text-muted-foreground/30 text-xs font-bold border-2 border-dashed border-muted rounded-2xl">No one-time fees yet</div>
                     )}
-
                     {oneTimeItems.map((item, index) => (
                       <div key={index} className="flex items-center gap-2">
                         <Select value={item.feeHead} onValueChange={(v) => updateOneTime(index, "feeHead", v)}>
-                          <SelectTrigger className="rounded-xl flex-1 text-sm">
-                            <SelectValue placeholder="Fee Head" />
-                          </SelectTrigger>
+                          <SelectTrigger className="rounded-xl flex-1 text-sm"><SelectValue placeholder="Fee Head" /></SelectTrigger>
                           <SelectContent className="rounded-xl">
                             {FEE_HEAD_OPTIONS.map((opt) => (
                               <SelectItem key={opt.value} value={opt.label}>{opt.label}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
-                        <Input
-                          type="number"
-                          placeholder="Rs."
-                          value={item.amount}
-                          onChange={(e) => updateOneTime(index, "amount", e.target.value)}
-                          className="rounded-xl w-24"
-                        />
+                        <Input type="number" placeholder="Rs." value={item.amount} onChange={(e) => updateOneTime(index, "amount", e.target.value)} className="rounded-xl w-24" />
                         <button type="button" onClick={() => removeOneTime(index)} className="p-2 rounded-xl text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors">
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -271,7 +253,6 @@ export default function FeeSetup() {
                     ))}
                   </div>
 
-                  {/* Total + Save */}
                   {(recurringItems.length > 0 || oneTimeItems.length > 0) && (
                     <div className="pt-4 border-t space-y-4">
                       <div className="flex items-center justify-between">
@@ -280,10 +261,14 @@ export default function FeeSetup() {
                       </div>
                       <Button
                         onClick={handleSave}
+                        disabled={isSaving}
                         className="w-full rounded-xl bg-primary font-black shadow-lg shadow-primary/20 hover:shadow-xl transition-all gap-2"
                       >
-                        <Save className="w-4 h-4" />
-                        {editingId ? "Update Structure" : "Save Structure"}
+                        {isSaving ? (
+                          <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</>
+                        ) : (
+                          <><Save className="w-4 h-4" />{editingId ? "Update Structure" : "Save Structure"}</>
+                        )}
                       </Button>
                     </div>
                   )}
@@ -299,64 +284,65 @@ export default function FeeSetup() {
               <div className="text-xs font-bold text-muted-foreground/50 uppercase tracking-widest">{structures.length} Classes</div>
             </CardHeader>
             <CardContent className="px-8 pb-8 space-y-4">
-              {structures.length === 0 && (
-                <div className="text-center py-12 text-muted-foreground/40 text-sm font-bold">No structures configured yet.</div>
-              )}
-              {structures.map((structure) => (
-                <div
-                  key={structure.id}
-                  onClick={() => handleClassSelect(structure.classId)}
-                  className={`p-5 rounded-2xl border-2 cursor-pointer transition-all hover:shadow-md ${
-                    selectedClass === structure.classId ? "border-primary bg-primary/5" : "border-border/50 hover:border-primary/30"
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="font-black text-foreground">{structure.className}</span>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); handleDelete(structure.id); }}
-                      className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  {/* Recurring */}
-                  {structure.recurringItems.length > 0 && (
-                    <div className="mb-2">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 mb-1 flex items-center gap-1">
-                        <RefreshCw className="w-2.5 h-2.5" /> Recurring
-                      </p>
-                      {structure.recurringItems.map((item) => (
-                        <div key={item.id} className="flex items-center justify-between text-sm py-0.5">
-                          <span className="text-muted-foreground font-medium">{item.feeHead} <span className="text-[10px] text-muted-foreground/40">({item.frequency})</span></span>
-                          <span className="font-bold text-foreground">Rs. {item.amount}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* One-Time */}
-                  {structure.oneTimeItems.length > 0 && (
-                    <div className="mb-2">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 mb-1 flex items-center gap-1">
-                        <Star className="w-2.5 h-2.5" /> One-Time
-                      </p>
-                      {structure.oneTimeItems.map((item) => (
-                        <div key={item.id} className="flex items-center justify-between text-sm py-0.5">
-                          <span className="text-muted-foreground font-medium">{item.feeHead}</span>
-                          <span className="font-bold text-foreground">Rs. {item.amount}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/50">
-                    <span className="text-xs font-black uppercase tracking-widest text-muted-foreground/50">Total</span>
-                    <span className="font-black text-primary">Rs. {structure.totalAmount}</span>
-                  </div>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12 gap-3 text-muted-foreground">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span className="text-sm font-medium">Loading structures...</span>
                 </div>
-              ))}
+              ) : structures.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground/40 text-sm font-bold">No structures configured yet.</div>
+              ) : (
+                structures.map((structure) => (
+                  <div
+                    key={structure.id}
+                    onClick={() => handleClassSelect(structure.classId)}
+                    className={`p-5 rounded-2xl border-2 cursor-pointer transition-all hover:shadow-md ${
+                      selectedClass === structure.classId ? "border-primary bg-primary/5" : "border-border/50 hover:border-primary/30"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-black text-foreground">{structure.className}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleDelete(structure.id); }}
+                        className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    {(structure.recurringItems ?? []).length > 0 && (
+                      <div className="mb-2">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 mb-1 flex items-center gap-1">
+                          <RefreshCw className="w-2.5 h-2.5" /> Recurring
+                        </p>
+                        {(structure.recurringItems ?? []).map((item) => (
+                          <div key={item.id} className="flex items-center justify-between text-sm py-0.5">
+                            <span className="text-muted-foreground font-medium">{item.feeHead} <span className="text-[10px] text-muted-foreground/40">({item.frequency})</span></span>
+                            <span className="font-bold text-foreground">Rs. {item.amount}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {(structure.oneTimeItems ?? []).length > 0 && (
+                      <div className="mb-2">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 mb-1 flex items-center gap-1">
+                          <Star className="w-2.5 h-2.5" /> One-Time
+                        </p>
+                        {(structure.oneTimeItems ?? []).map((item) => (
+                          <div key={item.id} className="flex items-center justify-between text-sm py-0.5">
+                            <span className="text-muted-foreground font-medium">{item.feeHead}</span>
+                            <span className="font-bold text-foreground">Rs. {item.amount}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/50">
+                      <span className="text-xs font-black uppercase tracking-widest text-muted-foreground/50">Total</span>
+                      <span className="font-black text-primary">Rs. {structure.totalAmount}</span>
+                    </div>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
 
@@ -373,7 +359,6 @@ function StatCard({ title, value, icon: Icon, variant }: { title: string; value:
     amber:  { bg: "bg-[oklch(0.7686_0.1647_70.0804)]/10 dark:bg-[oklch(0.7686_0.1647_70.0804)]/15",   iconBg: "bg-[oklch(0.7686_0.1647_70.0804)]/20",   iconColor: "text-[oklch(0.7686_0.1647_70.0804)]"   },
     purple: { bg: "bg-[oklch(0.6056_0.2189_292.7172)]/10 dark:bg-[oklch(0.6056_0.2189_292.7172)]/15", iconBg: "bg-[oklch(0.6056_0.2189_292.7172)]/20", iconColor: "text-[oklch(0.6056_0.2189_292.7172)]" },
   }[variant];
-
   return (
     <Card className={`rounded-[2.2rem] border-none shadow-sm p-7 transition-all hover:shadow-md group ${styles.bg}`}>
       <div className="flex items-center justify-between">

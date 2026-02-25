@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
-import { FileText, User, GraduationCap, CheckCircle2, XCircle } from "lucide-react";
+import { FileText, User, GraduationCap, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -26,9 +26,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Result } from "@/lib/types";
+import type { Result, Student } from "@/lib/types";
+import { resultsApi, studentsApi } from "@/lib/api";
 import {
-  STUDENT_OPTIONS,
   CLASS_OPTIONS,
   RESULT_OPTIONS,
 } from "@/lib/dropdown-options";
@@ -57,6 +57,16 @@ export default function ManageResultDetails({
   result,
   mode = "add",
 }: ManageResultProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [students, setStudents] = useState<Student[]>([]);
+
+  useEffect(() => {
+    studentsApi.getAll({ page: 1, limit: 500 }).then((res) => {
+      setStudents(res.data ?? []);
+    }).catch(() => {});
+  }, []);
+
   const {
     register,
     handleSubmit,
@@ -78,7 +88,7 @@ export default function ManageResultDetails({
         class: result.className,
         totalMarks: result.totalMarks,
         percentage: result.percentage,
-        result: result.result,
+        result: result.resultStatus,
       });
     } else {
       reset({
@@ -92,13 +102,33 @@ export default function ManageResultDetails({
     }
   }, [isOpen, result, reset]);
 
-  const onSubmit = (data: FormData) => {
-    console.log(mode === "edit" ? "Update Result:" : "Create Result:", data);
-    reset();
-    onOpenChange(false);
+  const onSubmit = async (data: FormData) => {
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      const payload = {
+        studentId: data.studentId,
+        studentName: data.studentName,
+        className: data.class,
+        totalMarks: data.totalMarks,
+        percentage: data.percentage,
+        result: data.result as "Pass" | "Fail",
+      };
+      if (result) {
+        await resultsApi.update(result.id, payload);
+      } else {
+        await resultsApi.create(payload);
+      }
+      reset();
+      onOpenChange(false);
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const isPassed = result?.result === "Pass";
+  const isPassed = result?.resultStatus === "Pass";
 
   const headerBg =
     mode === "view"
@@ -162,7 +192,6 @@ export default function ManageResultDetails({
             {description}
           </SheetDescription>
 
-          {/* Pass/Fail badge — only in view mode */}
           {mode === "view" && result && (
             <div className="mt-3 flex items-center gap-2">
               {isPassed ? (
@@ -236,17 +265,17 @@ export default function ManageResultDetails({
                         value={field.value ? String(field.value) : ""}
                         onValueChange={(val) => {
                           field.onChange(Number(val));
-                          const found = STUDENT_OPTIONS.find((o) => o.value === val);
-                          if (found) setValue("studentName", found.label.split(" - ")[0]);
+                          const found = students.find((s) => s.id === Number(val));
+                          if (found) setValue("studentName", found.name);
                         }}
                       >
                         <SelectTrigger className="rounded-xl border-muted-foreground/20">
                           <SelectValue placeholder="Select student" />
                         </SelectTrigger>
                         <SelectContent className="rounded-xl">
-                          {STUDENT_OPTIONS.map((opt) => (
-                            <SelectItem key={opt.value} value={opt.value}>
-                              {opt.label}
+                          {students.map((s) => (
+                            <SelectItem key={s.id} value={String(s.id)}>
+                              {s.name} - {s.studentId}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -271,7 +300,7 @@ export default function ManageResultDetails({
                       type="number"
                       step="0.01"
                       {...register("percentage")}
-                      placeholder="0 – 100"
+                      placeholder="0 - 100"
                       className="rounded-xl border-muted-foreground/20"
                     />
                   </FormField>
@@ -302,6 +331,10 @@ export default function ManageResultDetails({
                   />
                 </FormField>
               </FormSection>
+
+              {submitError && (
+                <p className="text-[11px] font-bold text-rose-500 text-center">{submitError}</p>
+              )}
             </form>
           )}
         </div>
@@ -316,9 +349,17 @@ export default function ManageResultDetails({
             <Button
               type="submit"
               form="result-form"
+              disabled={isSubmitting}
               className="rounded-xl bg-primary px-8 font-black shadow-lg shadow-primary/20 hover:shadow-xl transition-all"
             >
-              {mode === "edit" ? "Update Result" : "Save Result"}
+              {isSubmitting ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {mode === "edit" ? "Updating..." : "Saving..."}
+                </span>
+              ) : (
+                mode === "edit" ? "Update Result" : "Save Result"
+              )}
             </Button>
           )}
         </SheetFooter>
@@ -327,7 +368,6 @@ export default function ManageResultDetails({
   );
 }
 
-// Report Card display components
 function ReportSection({ title, icon: Icon, children }: { title: string; icon: LucideIcon; children: React.ReactNode }) {
   return (
     <div className="space-y-4">
@@ -349,7 +389,6 @@ function ReportRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-// Form helper components
 function FormSection({ title, icon: Icon, children }: { title: string; icon: LucideIcon; children: React.ReactNode }) {
   return (
     <div className="space-y-4">

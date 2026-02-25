@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
-import { GraduationCap, Contact, Camera, Trash2 } from "lucide-react";
+import { GraduationCap, Contact, Camera, Trash2, Loader2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { NepaliDatePickerField } from "@/components/common/NepaliDatePicekrField";
 import type { Teacher } from "@/lib/types";
+import { teachersApi } from "@/lib/api";
 import { SUBJECT_OPTIONS, GENDER_OPTIONS, STATUS_OPTIONS } from "@/lib/dropdown-options";
 
 interface ManageTeacherProps {
@@ -55,6 +56,8 @@ export default function ManageTeacherDetails({
   teacher,
 }: ManageTeacherProps) {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -70,6 +73,7 @@ export default function ManageTeacherDetails({
 
   useEffect(() => {
     if (!isOpen) return;
+    setSubmitError(null);
     if (teacher) {
       reset({
         name: teacher.name,
@@ -81,7 +85,6 @@ export default function ManageTeacherDetails({
         gender: teacher.gender ?? "",
         status: teacher.status,
       });
-      // eslint-disable-next-line react-hooks/exhaustive-deps
       setImagePreview(teacher.photo ?? null);
     } else {
       reset({ status: "Active", name: "", email: "", phone: "", dob: "", teacherId: "", subject: "", gender: "" });
@@ -90,7 +93,10 @@ export default function ManageTeacherDetails({
   }, [isOpen, teacher, reset]);
 
   const handleOpenChange = (open: boolean) => {
-    if (!open) setImagePreview(null);
+    if (!open) {
+      setImagePreview(null);
+      setSubmitError(null);
+    }
     onOpenChange(open);
   };
 
@@ -103,13 +109,26 @@ export default function ManageTeacherDetails({
     }
   };
 
-  const onSubmit = (data: FormData) => {
-    const payload: Omit<Teacher, "id" | "createdAt" | "updatedAt"> = {
-      ...data,
-      photo: imagePreview ?? undefined,
-    };
-    console.log(teacher ? "Update Teacher:" : "Create Teacher:", payload);
-    handleOpenChange(false);
+  const onSubmit = async (data: FormData) => {
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      const payload = {
+        ...data,
+        status: data.status as "Active" | "Inactive",
+        photo: imagePreview ?? undefined,
+      };
+      if (teacher) {
+        await teachersApi.update(teacher.id, payload);
+      } else {
+        await teachersApi.create(payload);
+      }
+      handleOpenChange(false);
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -270,21 +289,32 @@ export default function ManageTeacherDetails({
               </FormField>
             </FormSection>
 
+            {submitError && (
+              <p className="text-[11px] font-bold text-rose-500 text-center">{submitError}</p>
+            )}
           </form>
         </div>
 
         <SheetFooter className="p-8 bg-card border-t flex flex-row items-center justify-end gap-3">
           <SheetClose asChild>
-            <Button type="button" variant="ghost" className="rounded-xl font-bold text-muted-foreground">
+            <Button type="button" variant="ghost" className="rounded-xl font-bold text-muted-foreground" disabled={isSubmitting}>
               Cancel
             </Button>
           </SheetClose>
           <Button
             type="submit"
             form="teacher-form"
+            disabled={isSubmitting}
             className="rounded-xl bg-primary px-8 font-black shadow-lg shadow-primary/20 hover:shadow-xl transition-all"
           >
-            {teacher ? "Update Teacher" : "Add Teacher"}
+            {isSubmitting ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {teacher ? "Updating..." : "Adding..."}
+              </span>
+            ) : (
+              teacher ? "Update Teacher" : "Add Teacher"
+            )}
           </Button>
         </SheetFooter>
       </SheetContent>

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
-import { BookOpen } from "lucide-react";
+import { BookOpen, Loader2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { Subject } from "@/lib/types";
+import { subjectsApi } from "@/lib/api";
 
 interface ManageSubjectProps {
   isOpen: boolean;
@@ -39,6 +40,9 @@ export default function ManageSubjectDetails({
   onOpenChange,
   subject,
 }: ManageSubjectProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   const {
     register,
     handleSubmit,
@@ -50,6 +54,7 @@ export default function ManageSubjectDetails({
 
   useEffect(() => {
     if (!isOpen) return;
+    setSubmitError(null);
     if (subject) {
       reset({ name: subject.name, code: subject.code });
     } else {
@@ -57,9 +62,21 @@ export default function ManageSubjectDetails({
     }
   }, [isOpen, subject, reset]);
 
-  const onSubmit = (data: FormData) => {
-    console.log(subject ? "Update Subject:" : "Create Subject:", { ...subject, ...data });
-    onOpenChange(false);
+  const onSubmit = async (data: FormData) => {
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      if (subject) {
+        await subjectsApi.update(subject.id, { name: data.name, code: data.code, status: subject.status ?? "Active" });
+      } else {
+        await subjectsApi.create({ name: data.name, code: data.code, status: "Active" });
+      }
+      onOpenChange(false);
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -98,21 +115,33 @@ export default function ManageSubjectDetails({
                 />
               </FormField>
             </FormSection>
+
+            {submitError && (
+              <p className="text-[11px] font-bold text-rose-500 text-center">{submitError}</p>
+            )}
           </form>
         </div>
 
         <SheetFooter className="p-8 bg-card border-t flex flex-row items-center justify-end gap-3">
           <SheetClose asChild>
-            <Button type="button" variant="ghost" className="rounded-xl font-bold text-muted-foreground">
+            <Button type="button" variant="ghost" className="rounded-xl font-bold text-muted-foreground" disabled={isSubmitting}>
               Cancel
             </Button>
           </SheetClose>
           <Button
             type="submit"
             form="subject-form"
+            disabled={isSubmitting}
             className="rounded-xl bg-primary px-8 font-black shadow-lg shadow-primary/20 hover:shadow-xl transition-all"
           >
-            {subject ? "Update Subject" : "Add Subject"}
+            {isSubmitting ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {subject ? "Updating..." : "Adding..."}
+              </span>
+            ) : (
+              subject ? "Update Subject" : "Add Subject"
+            )}
           </Button>
         </SheetFooter>
       </SheetContent>

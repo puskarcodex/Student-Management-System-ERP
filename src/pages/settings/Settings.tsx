@@ -371,15 +371,9 @@ function SettingsSection({ title, icon: Icon, children }: { title: string; icon:
 }
 
 function FormField({
-  label,
-  error,
-  icon: Icon,
-  children,
+  label, error, icon: Icon, children,
 }: {
-  label: string;
-  error?: string;
-  icon?: LucideIcon;
-  children: React.ReactNode;
+  label: string; error?: string; icon?: LucideIcon; children: React.ReactNode;
 }) {
   return (
     <div className="grid gap-2">

@@ -1,37 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { GenericTable } from "@/components/GenericTable/generic-table";
 import LeaveDetails from "@/components/hr&payroll/leave-details";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Clock, CheckCircle, XCircle, Plus, Calendar } from "lucide-react";
+import { Clock, CheckCircle, XCircle, Plus, Calendar, Loader2 } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { LeaveRequest } from "@/lib/types";
-
-const MOCK_LEAVES: LeaveRequest[] = [
-  {
-    id: 1, employeeId: 101, employeeName: "Sita Rai", employeeType: "Teacher",
-    leaveType: "Sick", fromDate: "2024-03-10", toDate: "2024-03-12",
-    totalDays: 3, reason: "Fever and cold", status: "Approved", approvedBy: "Admin",
-  },
-  {
-    id: 2, employeeId: 102, employeeName: "Ram Thapa", employeeType: "Staff",
-    leaveType: "Casual", fromDate: "2024-03-15", toDate: "2024-03-15",
-    totalDays: 1, reason: "Personal work", status: "Pending",
-  },
-  {
-    id: 3, employeeId: 103, employeeName: "Priya Shrestha", employeeType: "Teacher",
-    leaveType: "Annual", fromDate: "2024-03-20", toDate: "2024-03-25",
-    totalDays: 6, reason: "Family vacation", status: "Pending",
-  },
-  {
-    id: 4, employeeId: 104, employeeName: "Bikash Karki", employeeType: "Staff",
-    leaveType: "Unpaid", fromDate: "2024-02-01", toDate: "2024-02-03",
-    totalDays: 3, reason: "Emergency travel", status: "Rejected",
-  },
-];
+import { leaveApi } from "@/lib/api";
 
 const columns: ColumnDef<LeaveRequest>[] = [
   {
@@ -49,9 +27,7 @@ const columns: ColumnDef<LeaveRequest>[] = [
   {
     accessorKey: "leaveType",
     header: "Leave Type",
-    cell: (info) => (
-      <span className="text-sm font-bold text-muted-foreground">{String(info.getValue())}</span>
-    ),
+    cell: (info) => <span className="text-sm font-bold text-muted-foreground">{String(info.getValue())}</span>,
   },
   {
     accessorKey: "fromDate",
@@ -76,9 +52,7 @@ const columns: ColumnDef<LeaveRequest>[] = [
   {
     accessorKey: "totalDays",
     header: "Days",
-    cell: (info) => (
-      <span className="font-black text-foreground">{String(info.getValue())}d</span>
-    ),
+    cell: (info) => <span className="font-black text-foreground">{String(info.getValue())}d</span>,
   },
   {
     accessorKey: "status",
@@ -91,7 +65,7 @@ const columns: ColumnDef<LeaveRequest>[] = [
         Rejected: "bg-rose-500/10 text-rose-600",
       };
       return (
-        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${styles[status]}`}>
+        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${styles[status] ?? ""}`}>
           {status}
         </span>
       );
@@ -100,33 +74,52 @@ const columns: ColumnDef<LeaveRequest>[] = [
 ];
 
 export default function LeavePage() {
-  const [leaves, setLeaves] = useState<LeaveRequest[]>(MOCK_LEAVES);
+  const [leaves, setLeaves]   = useState<LeaveRequest[]>([]);
   const [selected, setSelected] = useState<LeaveRequest | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen]   = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError]     = useState<string | null>(null);
+
+  const fetchLeaves = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const res = await leaveApi.getAll({ page: 1, limit: 200 });
+      setLeaves(res.data ?? []);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load leave requests");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchLeaves(); }, [fetchLeaves]);
 
   const pendingCount  = leaves.filter((l) => l.status === "Pending").length;
   const approvedCount = leaves.filter((l) => l.status === "Approved").length;
   const rejectedCount = leaves.filter((l) => l.status === "Rejected").length;
 
   const handleEdit = (row: LeaveRequest) => { setSelected(row); setIsOpen(true); };
-  const handleDelete = (row: LeaveRequest) => setLeaves(leaves.filter((l) => l.id !== row.id));
-
-  const handleSave = (data: LeaveRequest) => {
-    setLeaves(leaves.map((l) => l.id === data.id ? data : l));
-  };
-
-  const handleCreate = (data: Omit<LeaveRequest, "id">) => {
-    setLeaves([...leaves, { ...data, id: Date.now() }]);
-  };
-
-  // Quick approve/reject from table via onView
   const handleView = (row: LeaveRequest) => { setSelected(row); setIsOpen(true); };
+
+  const handleDelete = async (row: LeaveRequest) => {
+    try {
+      await leaveApi.delete(row.id);
+      setLeaves((prev) => prev.filter((l) => l.id !== row.id));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete");
+    }
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (!open) fetchLeaves();
+  };
 
   return (
     <div className="p-4 md:px-8 md:pt-2 md:pb-8 bg-muted/30 min-h-screen">
       <main className="space-y-8">
 
-        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 ml-1 mt-2">
           <div>
             <h1 className="text-4xl font-extrabold tracking-tight text-foreground">Leave Requests</h1>
@@ -136,45 +129,50 @@ export default function LeavePage() {
             onClick={() => { setSelected(null); setIsOpen(true); }}
             className="rounded-2xl bg-primary px-6 py-6 h-auto font-bold shadow-lg shadow-primary/20 hover:shadow-xl hover:-translate-y-1 transition-all gap-2"
           >
-            <Plus className="w-5 h-5" />
-            New Request
+            <Plus className="w-5 h-5" /> New Request
           </Button>
         </div>
 
-        {/* Stats */}
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard title="Pending"  value={String(pendingCount)}  icon={Clock}        variant="amber"  />
-          <StatCard title="Approved" value={String(approvedCount)} icon={CheckCircle}  variant="green"  />
-          <StatCard title="Rejected" value={String(rejectedCount)} icon={XCircle}      variant="purple" />
+          <StatCard title="Pending"  value={isLoading ? "..." : String(pendingCount)}  icon={Clock}       variant="amber"  />
+          <StatCard title="Approved" value={isLoading ? "..." : String(approvedCount)} icon={CheckCircle} variant="green"  />
+          <StatCard title="Rejected" value={isLoading ? "..." : String(rejectedCount)} icon={XCircle}     variant="purple" />
         </div>
 
-        {/* Table */}
         <Card className="rounded-[2.5rem] border-none shadow-sm overflow-hidden bg-card">
           <CardHeader className="px-8 pt-8 flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-xl font-bold tracking-tight">Leave Applications</CardTitle>
-            <div className="text-xs font-bold text-muted-foreground/50 uppercase tracking-widest">
-              Showing {leaves.length} Records
-            </div>
+            <div className="text-xs font-bold text-muted-foreground/50 uppercase tracking-widest">Showing {leaves.length} Records</div>
           </CardHeader>
           <CardContent className="px-8 pb-8">
-            <GenericTable
-              data={leaves}
-              columns={columns}
-              onView={handleView}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              searchKeys={["employeeName", "leaveType", "status"]}
-            />
+            {isLoading ? (
+              <div className="flex items-center justify-center py-20 gap-3 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="text-sm font-medium">Loading leave requests...</span>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <p className="text-sm font-bold text-rose-500">{error}</p>
+                <Button variant="outline" onClick={fetchLeaves} className="rounded-xl">Retry</Button>
+              </div>
+            ) : (
+              <GenericTable
+                data={leaves}
+                columns={columns}
+                onView={handleView}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                searchKeys={["employeeName", "leaveType", "status"]}
+              />
+            )}
           </CardContent>
         </Card>
       </main>
 
       <LeaveDetails
         isOpen={isOpen}
-        onOpenChange={setIsOpen}
+        onOpenChange={handleOpenChange}
         leave={selected}
-        onSave={handleSave}
-        onCreate={handleCreate}
       />
     </div>
   );
@@ -187,7 +185,6 @@ function StatCard({ title, value, icon: Icon, variant }: { title: string; value:
     amber:  { bg: "bg-[oklch(0.7686_0.1647_70.0804)]/10 dark:bg-[oklch(0.7686_0.1647_70.0804)]/15",   iconBg: "bg-[oklch(0.7686_0.1647_70.0804)]/20",   iconColor: "text-[oklch(0.7686_0.1647_70.0804)]"   },
     purple: { bg: "bg-[oklch(0.6056_0.2189_292.7172)]/10 dark:bg-[oklch(0.6056_0.2189_292.7172)]/15", iconBg: "bg-[oklch(0.6056_0.2189_292.7172)]/20", iconColor: "text-[oklch(0.6056_0.2189_292.7172)]" },
   }[variant];
-
   return (
     <Card className={`rounded-[2.2rem] border-none shadow-sm p-7 transition-all hover:shadow-md group ${styles.bg}`}>
       <div className="flex items-center justify-between">

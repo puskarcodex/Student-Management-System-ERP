@@ -1,5 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
-import { useState, useEffect, useCallback } from "react";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -35,59 +34,12 @@ import Register from "@/pages/login/Register";
 // 🔐 APP LAYOUT (SIDEBAR + HEADER)
 // ==============================
 function AppLayout() {
-  const location = useLocation();
-
-  const [expandedItems, setExpandedItems] = useState<string[]>(() => {
-    const saved = localStorage.getItem("expandedItems");
-    return saved ? JSON.parse(saved) : ["Students"];
-  });
-
-  const getParentFromRoute = useCallback((pathname: string): string | null => {
-    if (pathname.startsWith("/dashboard"))  return "Dashboard";
-    if (pathname.startsWith("/students"))   return "Students";
-    if (pathname.startsWith("/classes"))    return "Classes";
-    if (pathname.startsWith("/teachers"))   return "Teachers";
-    if (pathname.startsWith("/attendance")) return "Attendance";
-    if (pathname.startsWith("/fees"))       return "Fees";
-    if (pathname.startsWith("/hr-payroll")) return "HR & Payroll";
-    if (pathname.startsWith("/settings"))   return "Settings";
-    return null;
-  }, []);
-
-  // Fix: derive the parent outside the effect, update localStorage as a side effect only
-  useEffect(() => {
-    const parent = getParentFromRoute(location.pathname);
-    if (!parent) return;
-
-    // Read current value synchronously from localStorage to avoid setState in effect
-    const saved = localStorage.getItem("expandedItems");
-    const current: string[] = saved ? JSON.parse(saved) : ["Students"];
-
-    if (!current.includes(parent)) {
-      const updated = [...current, parent];
-      localStorage.setItem("expandedItems", JSON.stringify(updated));
-      // Use functional update form — still called in effect but updates
-      // are based on the ref value not triggering a re-render cascade
-      setExpandedItems(updated);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname]);
-
-  const handleSetExpandedItems = (items: string[]) => {
-    setExpandedItems(items);
-    localStorage.setItem("expandedItems", JSON.stringify(items));
-  };
-
   return (
     <SidebarProvider defaultOpen>
-      <AppSidebar
-        expandedItems={expandedItems}
-        setExpandedItems={handleSetExpandedItems}
-      />
+      <AppSidebar />
 
       <SidebarInset className="bg-background">
         <Header />
-        {/* Removed padding here — each page manages its own spacing */}
         <main className="flex-1 bg-background overflow-y-auto">
           <div className="mx-auto max-w-400">
             <Outlet />
@@ -106,6 +58,9 @@ export default function App() {
     <BrowserRouter>
       <Routes>
 
+        {/* Default: redirect root to login */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
+
         {/* Public Routes */}
         <Route path="/login"    element={<Login />} />
         <Route path="/register" element={<Register />} />
@@ -114,26 +69,25 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
 
-            <Route path="/"                    element={<Navigate to="/dashboard" />} />
-            <Route path="/dashboard"           element={<Dashboard />} />
-            <Route path="/students"            element={<Students />} />
-            <Route path="/teachers"            element={<Teachers />} />
-            <Route path="/staff"            element={<Staffs />} />
-            <Route path="/staff/roles"            element={<Roles />} />
-            <Route path="/classes"             element={<Classes />} />
-            <Route path="/subjects"            element={<Subjects />} />
-            <Route path="/subjects/teacher-assignment"            element={<TeacherAssignment />} />
-            <Route path="/attendance"          element={<StudentsAttendance />} />
-            <Route path="/attendance/teachersattendance" element={<TeachersAttendance />} />
-            <Route path="/attendance/staffattendance"    element={<StaffAttendance />} />
-            <Route path="/fees"                element={<Fees />} />
-            <Route path="/fees/collect"        element={<Collect />} />
-            <Route path="/fees/records"        element={<Records />} />
-            <Route path="/hr-payroll/leave"    element={<Leave />} />
-            <Route path="/hr-payroll/payroll"  element={<Payroll />} />
-            <Route path="/profile"  element={<Profile />} />
-            <Route path="/results"             element={<Results />} />
-            <Route path="/settings"            element={<Settings />} />
+            <Route path="/dashboard"                             element={<Dashboard />} />
+            <Route path="/students"                              element={<Students />} />
+            <Route path="/teachers"                              element={<Teachers />} />
+            <Route path="/staff"                                 element={<Staffs />} />
+            <Route path="/staff/roles"                           element={<Roles />} />
+            <Route path="/classes"                               element={<Classes />} />
+            <Route path="/subjects"                              element={<Subjects />} />
+            <Route path="/subjects/teacher-assignment"           element={<TeacherAssignment />} />
+            <Route path="/attendance"                            element={<StudentsAttendance />} />
+            <Route path="/attendance/teachersattendance"         element={<TeachersAttendance />} />
+            <Route path="/attendance/staffattendance"            element={<StaffAttendance />} />
+            <Route path="/fees"                                  element={<Fees />} />
+            <Route path="/fees/collect"                          element={<Collect />} />
+            <Route path="/fees/records"                          element={<Records />} />
+            <Route path="/hr-payroll/leave"                      element={<Leave />} />
+            <Route path="/hr-payroll/payroll"                    element={<Payroll />} />
+            <Route path="/profile"                               element={<Profile />} />
+            <Route path="/results"                               element={<Results />} />
+            <Route path="/settings"                              element={<Settings />} />
 
           </Route>
         </Route>

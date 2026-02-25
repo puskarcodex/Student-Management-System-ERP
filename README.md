@@ -2,12 +2,13 @@
 
 ## 🎯 Project Overview
 
-A complete React TypeScript frontend for a School Management System with full CRUD operations, responsive design, and dark mode support.
+A complete React TypeScript frontend for a School Management System with full CRUD operations, real backend API integration, responsive design, and dark mode support.
 
 | | |
 |---|---|
 | **Status** | ✅ Production Ready |
 | **Tech Stack** | React 18 + TypeScript + Tailwind CSS + ShadCN UI |
+| **Backend** | .NET 10 Web API (http://localhost:5272) |
 | **Routing** | React Router v6 |
 | **Forms** | React Hook Form + Yup Validation |
 | **State** | React Hooks |
@@ -27,7 +28,7 @@ src/
 │   ├── GenericTable/
 │   │   └── generic-table.tsx            # Reusable table (search, sort, edit, delete)
 │   ├── students/
-│   │   ├── student-details.tsx          # Student create/edit form
+│   │   ├── student-details.tsx
 │   │   ├── results-details.tsx
 │   │   └── enrollments-details.tsx
 │   ├── teachers/
@@ -44,13 +45,13 @@ src/
 │   │   ├── teachersattendance-details.tsx
 │   │   └── staffsattendance-details.tsx
 │   ├── fees/
-│   │   ├── feestructure-details.tsx
-│   │   └── collect-details.tsx
-│   ├── hr/
+│   │   ├── collect-details.tsx
+│   │   └── records-details.tsx
+│   ├── hr&payroll/
 │   │   ├── payroll-details.tsx
 │   │   └── leave-details.tsx
 │   ├── app-sidebar.tsx
-│   ├── header.tsx                       # Header with dynamic breadcrumb
+│   ├── header.tsx
 │   └── nav-main.tsx
 ├── pages/
 │   ├── dashboard/
@@ -58,7 +59,7 @@ src/
 │   ├── students/
 │   │   ├── Students.tsx
 │   │   ├── Results.tsx
-│   │  
+│   │   └── Enrollments.tsx
 │   ├── teachers/
 │   │   └── Teachers.tsx
 │   ├── staffs/
@@ -73,22 +74,23 @@ src/
 │   │   ├── TeachersAttendance.tsx
 │   │   └── StaffsAttendance.tsx
 │   ├── fees/
-│   │   ├── FeeStructure.tsx
-│   │   └── CollectFee.tsx
-│   ├── hr/
-│   │   ├── Payroll.tsx
-│   │   └── Leave.tsx
+│   │   ├── FeeSetup.tsx
+│   │   ├── FeeBilling.tsx
+│   │   └── FeeRecords.tsx
+│   ├── hr&payroll/
+│   │   ├── PayrollPage.tsx
+│   │   └── LeavePage.tsx
 │   ├── auth/
 │   │   ├── Login.tsx
 │   │   └── Register.tsx
-│   ├── Profile.tsx
+│   ├── ProfilePage.tsx
 │   └── settings/
-│       └── Settings.tsx
+│       └── SettingsPage.tsx
 ├── lib/
 │   ├── types.ts                         # All TypeScript interfaces & request/response types
-│   ├── api.ts                           # API service layer (ready for backend)
+│   ├── api.ts                           # API service layer (fully connected to backend)
 │   └── dropdown-options.ts             # Shared select/dropdown constants
-├── App.tsx                              # Root with routing
+├── App.tsx                              # Root with routing (/ redirects to /login)
 ├── main.tsx
 └── index.css
 ```
@@ -100,6 +102,7 @@ src/
 ### Prerequisites
 - Node.js 18+
 - npm or yarn
+- .NET 10 SDK (for backend)
 
 ### Installation
 
@@ -110,6 +113,22 @@ npm install
 # Start development server
 npm run dev
 # → http://localhost:5173
+```
+
+### Environment Setup
+
+Create a `.env` file in the project root:
+
+```env
+VITE_API_URL=http://localhost:5272/api
+```
+
+### Backend
+
+```bash
+# From backend project root
+dotnet run
+# → http://localhost:5272
 ```
 
 ### Build for Production
@@ -123,27 +142,60 @@ npm run preview
 
 ## 📋 Pages & Routes
 
-| Route | Page | Description |
-|-------|------|-------------|
-| `/dashboard` | Dashboard | Stats, charts, overview |
-| `/students` | Students | Full student CRUD |
-| `/students/results` | Results | Exam results management |
-| `/students/enrollments` | Enrollments | Course enrollment management |
-| `/teachers` | Teachers | Teacher CRUD |
-| `/staffs` | Staffs | Staff CRUD |
-| `/staffs/roles` | Roles | Role management |
-| `/classes` | Classes | Class management |
-| `/classes/subjects` | Subjects | Subject management |
-| `/classes/teacher-assignment` | Teacher Assignment | Assign teachers to subjects |
-| `/attendance/students` | Student Attendance | Mark & track student attendance |
-| `/attendance/teachers` | Teacher Attendance | Mark & track teacher attendance |
-| `/attendance/staffs` | Staff Attendance | Mark & track staff attendance |
-| `/fees/structure` | Fee Structure | Define fee structures per class |
-| `/fees/collect` | Collect Fee | Bill & collect student fees |
-| `/hr/payroll` | Payroll | Staff payroll management |
-| `/hr/leave` | Leave | Leave request management |
-| `/profile` | Profile | User profile & password change |
-| `/settings` | Settings | App configuration |
+| Route | Page | Status |
+|-------|------|--------|
+| `/login` | Login | ✅ Connected |
+| `/register` | Register | ✅ Connected |
+| `/dashboard` | Dashboard | ✅ Connected |
+| `/students` | Students | ✅ Connected |
+| `/students/results` | Results | ✅ Connected |
+| `/students/enrollments` | Enrollments | ✅ Connected |
+| `/teachers` | Teachers | ✅ Connected |
+| `/staffs` | Staffs | ✅ Connected |
+| `/staffs/roles` | Roles | ✅ Connected |
+| `/classes` | Classes | ✅ Connected |
+| `/classes/subjects` | Subjects | ✅ Connected |
+| `/classes/teacher-assignment` | Teacher Assignment | ✅ Connected |
+| `/attendance/students` | Student Attendance | ✅ Connected |
+| `/attendance/teachers` | Teacher Attendance | ✅ Connected |
+| `/attendance/staffs` | Staff Attendance | ✅ Connected |
+| `/fees/setup` | Fee Setup | ✅ Connected |
+| `/fees/billing` | Collect Fees | ✅ Connected |
+| `/fees/records` | Fee Records | ✅ Connected |
+| `/hr/payroll` | Payroll | ✅ Connected |
+| `/hr/leave` | Leave Requests | ✅ Connected |
+| `/profile` | Profile | ✅ Connected |
+| `/settings` | Settings | ⚙️ localStorage only (no backend endpoints) |
+
+---
+
+## 🔌 API Integration
+
+All modules are fully connected to the .NET 10 backend. No mock data remains except the Settings page which is intentionally localStorage-based.
+
+### Backend Route Map
+
+| Frontend API | Backend Controller | Route |
+|---|---|---|
+| `authApi` | `AuthController` | `api/auth` |
+| `dashboardApi` | `DashboardController` | `api/dashboard` |
+| `studentsApi` | `StudentController` | `api/student` |
+| `teachersApi` | `TeacherController` | `api/teacher` |
+| `staffApi` | `StaffController` | `api/staff` |
+| `classesApi` | `ClassController` | `api/class` |
+| `subjectsApi` | `SubjectController` | `api/subject` |
+| `subjectAssignmentsApi` | `SubjectAssignmentController` | `api/subjectassignment` |
+| `resultsApi` | `ResultController` | `api/result` |
+| `enrollmentsApi` | `EnrollmentController` | `api/enrollment` |
+| `attendanceApi` | `AttendanceController` | `api/attendance` |
+| `feeStructureApi` | `FeeStructureController` | `api/feestructure` |
+| `feeBillsApi` | `FeeBillController` | `api/feebill` |
+| `payrollApi` | `PayrollController` | `api/payroll` |
+| `leaveApi` | `LeaveRequestController` | `api/leaverequest` |
+
+### Authentication
+
+JWT tokens are stored in `localStorage` and automatically attached to every request via the `Authorization: Bearer <token>` header. The root `/` route redirects to `/login`. Protected routes redirect unauthenticated users to `/login`.
 
 ---
 
@@ -153,48 +205,56 @@ npm run preview
 
 ```
 Page (e.g. Students.tsx)
-  ├── useState — local data, open/close modal
-  ├── GenericTable — renders rows with edit/delete actions
+  ├── useState — records, loading, error, selected, isOpen
+  ├── useCallback — fetchData()
+  ├── useEffect — calls fetchData() on mount
+  ├── GenericTable — renders rows with view/edit/delete actions
   └── DetailSheet (e.g. student-details.tsx)
         ├── React Hook Form + Yup schema
         ├── Controller for Select/DatePicker fields
-        └── onSubmit → console.log (replace with API call)
+        └── onSubmit → API create/update → onOpenChange(false)
 ```
 
-### Current Flow (Mock Data)
+### Data Flow
 
 ```typescript
 // Page
-const [students, setStudents] = useState<Student[]>(MOCK_STUDENTS);
+const fetchData = useCallback(async () => {
+  setIsLoading(true);
+  setError(null);
+  try {
+    const res = await studentsApi.getAll({ page: 1, limit: 200 });
+    setStudents(res.data ?? []);
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Failed to load");
+  } finally {
+    setIsLoading(false);
+  }
+}, []);
 
-const handleEdit   = (s: Student) => { setSelected(s); setIsOpen(true); };
-const handleDelete = (s: Student) => setStudents(prev => prev.filter(x => x.id !== s.id));
-```
-
-### After API Integration
-
-```typescript
-// Page
-const [students, setStudents] = useState<Student[]>([]);
-const [loading, setLoading]   = useState(true);
-
-useEffect(() => { fetchStudents(); }, []);
-
-const fetchStudents = async () => {
-  setLoading(true);
-  const res = await studentsApi.getAll();
-  setStudents(res.data);
-  setLoading(false);
+// Sheet closes → triggers refresh
+const handleOpenChange = (open: boolean) => {
+  setIsOpen(open);
+  if (!open) fetchData();
 };
 
 // Detail component onSubmit
 const onSubmit = async (data: FormData) => {
-  if (student) await studentsApi.update(student.id, data);
-  else         await studentsApi.create(data);
-  onSuccess(); // refresh parent list
-  onOpenChange(false);
+  if (record) await api.update(record.id, data);
+  else        await api.create(data);
+  onOpenChange(false); // triggers parent refresh
 };
 ```
+
+---
+
+## 💰 Fee Module Notes
+
+The fee module has three pages with specific backend mapping:
+
+- **Fee Setup** (`/fees/setup`) — Manages `FeeStructure` entities with nested `FeeItems`. The backend returns `feeItems` as a flat array which the frontend splits into `recurringItems` and `oneTimeItems` for display.
+- **Collect Fees** (`/fees/billing`) — Creates `FeeBill` records via `POST /api/feebill`. Fee structure auto-loads when a class is selected.
+- **Fee Records** (`/fees/records`) — Lists all bills with payment recording via `PATCH /api/feebill/{id}/pay`.
 
 ---
 
@@ -225,49 +285,9 @@ const schema = yup.object({
 
 ---
 
-## 🔌 API Layer (`src/lib/api.ts`)
-
-All endpoints are pre-built and typed. Set your backend URL in `.env`:
-
-```env
-VITE_API_URL=http://localhost:5000/api
-```
-
-Available API namespaces:
-
-| Export | Covers |
-|--------|--------|
-| `authApi` | login, logout, me, changePassword, updateProfile |
-| `dashboardApi` | stats, enrollments, attendance overview, revenue |
-| `studentsApi` | CRUD + report |
-| `teachersApi` | CRUD |
-| `staffApi` | CRUD |
-| `classesApi` | CRUD |
-| `subjectsApi` | CRUD |
-| `subjectAssignmentsApi` | CRUD + assignTeacher |
-| `resultsApi` | CRUD + getByStudent |
-| `enrollmentsApi` | CRUD |
-| `attendanceApi` | CRUD + getByEntityType + report |
-| `feesApi` | getAll + report |
-| `feeStructureApi` | CRUD + getByClass + updateItems |
-| `feeBillsApi` | CRUD + getByStudent + recordPayment |
-| `payrollApi` | CRUD + markPaid |
-| `leaveApi` | CRUD + approve + reject |
-
-### Query Parameter Flattening
-
-`buildQuery` automatically flattens nested filter objects:
-
-```typescript
-// { dateRange: { start: "2024-01-01", end: "2024-12-31" } }
-// → ?dateRange[start]=2024-01-01&dateRange[end]=2024-12-31
-```
-
----
-
 ## 📐 Type System (`src/lib/types.ts`)
 
-Key changes from v1 — **breaking renames**:
+Key field renames from original design:
 
 | Old | New | Reason |
 |-----|-----|--------|
@@ -276,8 +296,6 @@ Key changes from v1 — **breaking renames**:
 | `Attendance.studentName` | `Attendance.name` | used for Teacher/Staff too |
 | `Attendance.studentId` | `Attendance.entityId` | generic across entity types |
 | — | `Attendance.entityType` | `"Student" \| "Teacher" \| "Staff"` (required) |
-
-Every entity has matching `Create*Request`, `Update*Request`, and filter types exported from `types.ts`.
 
 ---
 
@@ -318,41 +336,6 @@ const { theme, toggleTheme } = useTheme();
 
 ---
 
-## ✅ Backend Integration Checklist
-
-For each page + detail component pair:
-
-**Page:**
-- [ ] Remove `MOCK_*` array
-- [ ] Add `loading` + `error` state
-- [ ] Add `useEffect` → `fetchData()`
-- [ ] Update `handleDelete` to call API
-- [ ] Pass `onSuccess={fetchData}` to detail component
-- [ ] Add loading/error UI
-
-**Detail component:**
-- [ ] Update `onSubmit` to call `create` or `update`
-- [ ] Add `onSuccess` to props
-- [ ] Wrap in try/catch with error feedback
-
-**Modules to update (in order):**
-1. Students + student-details
-2. Teachers + teacher-details
-3. Staffs + staffs-details
-4. Classes + classes-details
-5. Subjects + subjects-details
-6. Teacher Assignment + teacherassignment-details
-7. Results + results-details
-8. Enrollments + enrollments-details
-9. Student/Teacher/Staff Attendance + their detail components
-10. Fee Structure + feestructure-details
-11. Collect Fee + collect-details
-12. Payroll + payroll-details
-13. Leave + leave-details
-14. Dashboard (read-only, just fetch stats)
-
----
-
 ## 🐛 Common Issues
 
 | Problem | Fix |
@@ -362,22 +345,29 @@ For each page + detail component pair:
 | Type errors | Run `npm run build` and read the output |
 | `undefined` in table | Check `accessorKey` matches field name in data |
 | Select not populating | Must use `Controller`, not `register` |
+| CORS error | Backend must allow `http://localhost:5173` in CORS config |
+| 401 Unauthorized | Token expired — log out and log back in |
+| 404 on API call | Check `VITE_API_URL` in `.env` matches backend port |
+| Fee structure not loading in billing | Backend `GetPagedAsync` must `.Include(f => f.FeeItems)` |
 
 ---
 
-## 🎯 Project Status
+## ✅ Integration Status
 
-| Area | Status |
-|------|--------|
-| All pages & routes | ✅ Complete |
-| CRUD with mock data | ✅ Complete |
-| TypeScript types | ✅ Complete |
-| API service layer | ✅ Complete |
-| Form validation | ✅ Complete |
-| Responsive design | ✅ Complete |
-| Dark/light theme | ✅ Complete |
-| Backend integration | ⏳ Pending |
+| Module | Pages | API Connected |
+|--------|-------|---------------|
+| Auth | Login, Register | ✅ |
+| Dashboard | Dashboard | ✅ |
+| Students | Students, Results, Enrollments | ✅ |
+| Teachers | Teachers | ✅ |
+| Staff | Staffs, Roles | ✅ |
+| Classes | Classes, Subjects, Teacher Assignment | ✅ |
+| Attendance | Students, Teachers, Staff | ✅ |
+| Fees | Fee Setup, Collect Fees, Fee Records | ✅ |
+| HR & Payroll | Payroll, Leave Requests | ✅ |
+| Profile | Profile | ✅ |
+| Settings | Settings | ⚙️ localStorage only |
 
 ---
 
-**Version**: 2.0.0 | **Last Updated**: February 2026
+**Version**: 3.0.0 | **Last Updated**: February 2026

@@ -1,37 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { GenericTable } from "@/components/GenericTable/generic-table";
 import ManageTeacherDetails from "@/components/teachers/teachers-details";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Users, BookOpen, Award } from "lucide-react";
+import { Users, BookOpen, Award, Loader2 } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { Teacher } from "@/lib/types";
-
-const mockTeachers: Teacher[] = [
-  {
-    id: 1,
-    name: "Mr. Sharma",
-    email: "sharma@school.com",
-    phone: "+1234567890",
-    dob: "1980-05-15",
-    teacherId: "TCH001",
-    subject: "Mathematics",
-    status: "Active",
-  },
-  {
-    id: 2,
-    name: "Ms. Patel",
-    email: "patel@school.com",
-    phone: "+9876543210",
-    dob: "1985-08-20",
-    teacherId: "TCH002",
-    subject: "English",
-    status: "Active",
-  },
-];
+import { teachersApi } from "@/lib/api";
 
 const columns: ColumnDef<Teacher>[] = [
   { accessorKey: "name", header: "Name" },
@@ -57,16 +35,43 @@ const columns: ColumnDef<Teacher>[] = [
 
 export default function Teachers() {
   const [isManage, setIsManage] = useState(false);
-  const [teachers, setTeachers] = useState<Teacher[]>(mockTeachers);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchTeachers = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const res = await teachersApi.getAll({ page: 1, limit: 100 });
+      setTeachers(res.data ?? []);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load teachers");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchTeachers(); }, [fetchTeachers]);
 
   const handleEdit = (teacher: Teacher) => {
     setSelectedTeacher(teacher);
     setIsManage(true);
   };
 
-  const handleDelete = (teacher: Teacher) => {
-    setTeachers(teachers.filter((t) => t.id !== teacher.id));
+  const handleDelete = async (teacher: Teacher) => {
+    try {
+      await teachersApi.delete(teacher.id);
+      setTeachers((prev) => prev.filter((t) => t.id !== teacher.id));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete teacher");
+    }
+  };
+
+  const handleManageClose = (open: boolean) => {
+    setIsManage(open);
+    if (!open) fetchTeachers();
   };
 
   return (
@@ -93,8 +98,8 @@ export default function Teachers() {
 
         {/* Stats Row */}
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard title="Total Teachers" value={String(teachers.length)} icon={Users} variant="green" />
-          <StatCard title="Active Teachers" value={String(teachers.filter((t) => t.status === "Active").length)} icon={BookOpen} variant="blue" />
+          <StatCard title="Total Teachers" value={isLoading ? "..." : String(teachers.length)} icon={Users} variant="green" />
+          <StatCard title="Active Teachers" value={isLoading ? "..." : String(teachers.filter((t) => t.status === "Active").length)} icon={BookOpen} variant="blue" />
           <StatCard title="Subjects Offered" value="12" icon={Award} variant="amber" />
         </div>
 
@@ -107,20 +112,32 @@ export default function Teachers() {
             </div>
           </CardHeader>
           <CardContent className="px-8 pb-8">
-            <GenericTable
-              data={teachers}
-              columns={columns}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              searchKeys={["name", "email", "subject"]}
-            />
+            {isLoading ? (
+              <div className="flex items-center justify-center py-20 gap-3 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="text-sm font-medium">Loading teachers...</span>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <p className="text-sm font-bold text-rose-500">{error}</p>
+                <Button variant="outline" onClick={fetchTeachers} className="rounded-xl">Retry</Button>
+              </div>
+            ) : (
+              <GenericTable
+                data={teachers}
+                columns={columns}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                searchKeys={["name", "email", "subject"]}
+              />
+            )}
           </CardContent>
         </Card>
       </main>
 
       <ManageTeacherDetails
         isOpen={isManage}
-        onOpenChange={setIsManage}
+        onOpenChange={handleManageClose}
         teacher={selectedTeacher}
       />
     </div>

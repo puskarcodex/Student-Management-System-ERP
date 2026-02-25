@@ -1,35 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { BookOpen, UserCheck, UserX, Check, RotateCcw, Plus, Pencil, Trash2 } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 
 import TeacherAssignmentDetails, {
   type SubjectAssignment,
-  MOCK_TEACHERS,
 } from "@/components/subjects/teacherassignment-details";
-
-const INITIAL_SUBJECTS: SubjectAssignment[] = [
-  { id: 1,  subjectName: "Mathematics",     subjectCode: "MATH01", className: "Class 5",  teacherId: "1", teacherName: "Mr. Rajesh Kumar"   },
-  { id: 2,  subjectName: "English",          subjectCode: "ENG01",  className: "Class 5",  teacherId: "2", teacherName: "Mrs. Anjali Sharma"  },
-  { id: 3,  subjectName: "Science",          subjectCode: "SCI01",  className: "Class 5",  teacherId: "",  teacherName: ""                    },
-  { id: 4,  subjectName: "Nepali",           subjectCode: "NEP01",  className: "Class 5",  teacherId: "3", teacherName: "Mr. Suresh Gautam"   },
-  { id: 5,  subjectName: "Social Studies",   subjectCode: "SOC01",  className: "Class 9",  teacherId: "",  teacherName: ""                    },
-  { id: 6,  subjectName: "Computer Science", subjectCode: "COM01",  className: "Class 9",  teacherId: "5", teacherName: "Mr. Bikash Karki"    },
-  { id: 7,  subjectName: "Mathematics",      subjectCode: "MATH02", className: "Class 9",  teacherId: "1", teacherName: "Mr. Rajesh Kumar"    },
-  { id: 8,  subjectName: "Health & PE",      subjectCode: "HPE01",  className: "Class 9",  teacherId: "",  teacherName: ""                    },
-  { id: 9,  subjectName: "Moral Education",  subjectCode: "MOR01",  className: "Class 10", teacherId: "4", teacherName: "Ms. Priya Shrestha"  },
-  { id: 10, subjectName: "English",          subjectCode: "ENG02",  className: "Class 10", teacherId: "2", teacherName: "Mrs. Anjali Sharma"  },
-];
+import type { Teacher } from "@/lib/types";
+import { subjectAssignmentsApi, teachersApi } from "@/lib/api";
 
 const SUBJECT_COLORS = [
   { bg: "bg-[oklch(0.6959_0.1491_162.4796)]/10", text: "text-[oklch(0.6959_0.1491_162.4796)]" },
@@ -39,11 +23,28 @@ const SUBJECT_COLORS = [
 ];
 
 export default function TeacherAssignmentPage() {
-  const [subjects, setSubjects]   = useState<SubjectAssignment[]>(INITIAL_SUBJECTS);
-  const [pending, setPending]     = useState<Record<number, string>>({});
-  const [saved, setSaved]         = useState<Record<number, boolean>>({});
-  const [selected, setSelected]   = useState<SubjectAssignment | null>(null);
-  const [isOpen, setIsOpen]       = useState(false);
+  const [subjects, setSubjects] = useState<SubjectAssignment[]>([]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [pending, setPending]   = useState<Record<number, string>>({});
+  const [saved, setSaved]       = useState<Record<number, boolean>>({});
+  const [selected, setSelected] = useState<SubjectAssignment | null>(null);
+  const [isOpen, setIsOpen]     = useState(false);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const [assignRes, teacherRes] = await Promise.all([
+        subjectAssignmentsApi.getAll({ page: 1, limit: 200 }),
+        teachersApi.getAll({ page: 1, limit: 500 }),
+      ]);
+      setSubjects(assignRes.data ?? []);
+      setTeachers(teacherRes.data ?? []);
+    } catch {
+      // silently fail
+    }
+  }, []);
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const totalSubjects   = subjects.length;
   const assignedCount   = subjects.filter((s) => s.teacherId !== "").length;
@@ -56,56 +57,79 @@ export default function TeacherAssignmentPage() {
     return acc;
   }, {});
 
-  // ---- Teacher dropdown assignment ----
+  // ---- Inline dropdown assignment ----
   const handleSelect = (subjectId: number, teacherId: string) => {
     setPending((prev) => ({ ...prev, [subjectId]: teacherId }));
     setSaved((prev) => ({ ...prev, [subjectId]: false }));
   };
 
-  const handleSave = (subjectId: number) => {
+  const handleSave = async (subjectId: number) => {
     const newTeacherId = pending[subjectId];
     if (newTeacherId === undefined) return;
-    const teacher = MOCK_TEACHERS.find((t) => t.id === newTeacherId);
-    setSubjects((prev) => prev.map((s) =>
-      s.id === subjectId ? { ...s, teacherId: newTeacherId, teacherName: teacher?.name ?? "" } : s
-    ));
-    setPending((prev) => { const n = { ...prev }; delete n[subjectId]; return n; });
-    setSaved((prev) => ({ ...prev, [subjectId]: true }));
-    setTimeout(() => setSaved((prev) => ({ ...prev, [subjectId]: false })), 2000);
+    const teacher = teachers.find((t) => String(t.id) === newTeacherId);
+    try {
+      await subjectAssignmentsApi.assignTeacher(subjectId, {
+        teacherId: newTeacherId,
+        teacherName: teacher?.name ?? "",
+      });
+      setSubjects((prev) => prev.map((s) =>
+        s.id === subjectId ? { ...s, teacherId: newTeacherId, teacherName: teacher?.name ?? "" } : s
+      ));
+      setPending((prev) => { const n = { ...prev }; delete n[subjectId]; return n; });
+      setSaved((prev) => ({ ...prev, [subjectId]: true }));
+      setTimeout(() => setSaved((prev) => ({ ...prev, [subjectId]: false })), 2000);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to save");
+    }
   };
 
   const handleReset = (subjectId: number) => {
     setPending((prev) => { const n = { ...prev }; delete n[subjectId]; return n; });
   };
 
-  const handleSaveAll = () => {
-    const updated = subjects.map((s) => {
-      if (pending[s.id] === undefined) return s;
-      const teacher = MOCK_TEACHERS.find((t) => t.id === pending[s.id]);
-      return { ...s, teacherId: pending[s.id], teacherName: teacher?.name ?? "" };
-    });
-    setSubjects(updated);
-    setPending({});
-    const allSaved = Object.fromEntries(updated.map((s) => [s.id, true]));
-    setSaved(allSaved);
-    setTimeout(() => setSaved({}), 2000);
+  const handleSaveAll = async () => {
+    try {
+      await Promise.all(
+        Object.entries(pending).map(([id, teacherId]) => {
+          const teacher = teachers.find((t) => String(t.id) === teacherId);
+          return subjectAssignmentsApi.assignTeacher(Number(id), {
+            teacherId,
+            teacherName: teacher?.name ?? "",
+          });
+        })
+      );
+      const updated = subjects.map((s) => {
+        if (pending[s.id] === undefined) return s;
+        const teacher = teachers.find((t) => String(t.id) === pending[s.id]);
+        return { ...s, teacherId: pending[s.id], teacherName: teacher?.name ?? "" };
+      });
+      setSubjects(updated);
+      setPending({});
+      const allSaved = Object.fromEntries(updated.map((s) => [s.id, true]));
+      setSaved(allSaved);
+      setTimeout(() => setSaved({}), 2000);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to save all");
+    }
   };
 
-  // ---- Sheet actions ----
+  // ---- Sheet open/close ----
   const handleEdit = (s: SubjectAssignment) => { setSelected(s); setIsOpen(true); };
   const handleAdd  = () => { setSelected(null); setIsOpen(true); };
 
-  const handleDelete = (id: number) => {
-    setSubjects((prev) => prev.filter((s) => s.id !== id));
-    setPending((prev) => { const n = { ...prev }; delete n[id]; return n; });
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (!open) fetchData(); // refresh after sheet closes
   };
 
-  const handleSaveSheet = (data: SubjectAssignment) => {
-    setSubjects((prev) => prev.map((s) => s.id === data.id ? data : s));
-  };
-
-  const handleCreateSheet = (data: Omit<SubjectAssignment, "id">) => {
-    setSubjects((prev) => [...prev, { ...data, id: Date.now() }]);
+  const handleDelete = async (id: number) => {
+    try {
+      await subjectAssignmentsApi.delete(id);
+      setSubjects((prev) => prev.filter((s) => s.id !== id));
+      setPending((prev) => { const n = { ...prev }; delete n[id]; return n; });
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete");
+    }
   };
 
   return (
@@ -173,14 +197,12 @@ export default function TeacherAssignmentPage() {
                                     "border-border/40 bg-muted/30 hover:bg-muted/50"
                       }`}
                     >
-                      {/* Saved tick */}
                       {isSaved && (
                         <div className="absolute top-3 right-3 w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center">
                           <Check className="w-3 h-3 text-white" />
                         </div>
                       )}
 
-                      {/* Hover edit/delete — hidden when pending or saved */}
                       {!isPending && !isSaved && (
                         <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
@@ -200,7 +222,6 @@ export default function TeacherAssignmentPage() {
                         </div>
                       )}
 
-                      {/* Subject info */}
                       <div className="flex items-start gap-3">
                         <div className={`p-2.5 rounded-xl ${color.bg} shrink-0`}>
                           <BookOpen className={`w-4 h-4 ${color.text}`} />
@@ -211,7 +232,6 @@ export default function TeacherAssignmentPage() {
                         </div>
                       </div>
 
-                      {/* Teacher dropdown */}
                       <div className="space-y-1.5">
                         <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30">Assigned Teacher</p>
                         <Select
@@ -229,14 +249,13 @@ export default function TeacherAssignmentPage() {
                             <SelectItem value="unassigned" className="text-muted-foreground/50 font-medium">
                               — Unassigned —
                             </SelectItem>
-                            {MOCK_TEACHERS.map((t) => (
-                              <SelectItem key={t.id} value={t.id} className="font-medium">{t.name}</SelectItem>
+                            {teachers.map((t) => (
+                              <SelectItem key={t.id} value={String(t.id)} className="font-medium">{t.name}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
 
-                      {/* Save/Reset when pending */}
                       {isPending && (
                         <div className="flex gap-2">
                           <Button
@@ -262,14 +281,23 @@ export default function TeacherAssignmentPage() {
             </CardContent>
           </Card>
         ))}
+
+        {Object.keys(grouped).length === 0 && (
+          <Card className="rounded-[2.5rem] border-none shadow-sm bg-card">
+            <CardContent className="flex flex-col items-center justify-center py-20 gap-3">
+              <BookOpen className="w-10 h-10 text-muted-foreground/30" />
+              <p className="text-sm font-bold text-muted-foreground">No subject assignments yet</p>
+              <Button onClick={handleAdd} className="rounded-xl mt-2">Add First Assignment</Button>
+            </CardContent>
+          </Card>
+        )}
       </main>
 
       <TeacherAssignmentDetails
         isOpen={isOpen}
-        onOpenChange={setIsOpen}
+        onOpenChange={handleOpenChange}
         subject={selected}
-        onSave={handleSaveSheet}
-        onCreate={handleCreateSheet}
+        teachers={teachers}
       />
     </div>
   );
